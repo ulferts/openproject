@@ -32,12 +32,15 @@ import {OpenprojectCommonModule} from "core-app/modules/common/openproject-commo
 import {IFCViewerComponent} from './ifc-viewer/ifc-viewer.component';
 import {IFC_ROUTES} from "core-app/modules/ifc_models/openproject-ifc-models.routes";
 import {IFCViewerPageComponent} from "core-app/modules/ifc_models/pages/viewer/ifc-viewer-page.component";
-import {BCFContainerComponent} from "core-app/modules/ifc_models/bcf/container/bcf-container.component";
+import {BCFListContainerComponent} from "core-app/modules/ifc_models/bcf/list-container/bcf-list-container.component";
 import {EmptyComponent} from "core-app/modules/ifc_models/empty/empty-component";
+import {BCFNewSplitComponent} from "core-app/modules/ifc_models/bcf/new-split/bcf-new-split.component";
+import {OpenprojectFieldsModule} from "core-app/modules/fields/openproject-fields.module";
 
 @NgModule({
   imports: [
     OpenprojectCommonModule,
+    OpenprojectFieldsModule,
     OpenprojectWorkPackagesModule,
     UIRouterModule.forChild({
       states: IFC_ROUTES
@@ -51,8 +54,8 @@ import {EmptyComponent} from "core-app/modules/ifc_models/empty/empty-component"
 
     // Regions of pages
     EmptyComponent,
-    BCFContainerComponent,
-
+    BCFListContainerComponent,
+    BCFNewSplitComponent,
     IFCViewerComponent
   ],
   exports: [
