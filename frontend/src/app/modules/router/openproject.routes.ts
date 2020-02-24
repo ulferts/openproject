@@ -129,6 +129,7 @@ export function initializeUiRouterListeners(injector:Injector) {
     const firstRoute:FirstRouteService = injector.get(FirstRouteService);
     const backRoutingService:BackRoutingService = injector.get(BackRoutingService);
 
+
     // Check whether we are running within our complete app, or only within some other bootstrapped
     // component
     let wpBase = document.querySelector(appBaseSelector);

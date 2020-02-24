@@ -49,6 +49,8 @@ import {WorkPackageNotificationService} from "core-app/modules/work_packages/not
 })
 export class WorkPackageSplitViewComponent extends WorkPackageSingleViewBase implements OnInit {
 
+  readonly showResizer = true;
+
   constructor(public injector:Injector,
               public states:States,
               public firstRoute:FirstRouteService,

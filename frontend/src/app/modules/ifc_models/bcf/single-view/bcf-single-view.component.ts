@@ -32,9 +32,12 @@ import {StateService} from "@uirouter/core";
 
 @Component({
   selector: 'bcf-single-view',
-  templateUrl: './bcf-single-view.component.html'
+  host: { 'class': 'work-packages-split-view--details-side' },
+  templateUrl: '/app/modules/work_packages/routing/wp-split-view/wp-split-view.html'
 })
 export class BcfSingleViewComponent extends WorkPackageSingleViewBase implements OnInit {
+
+  readonly showResizer = false;
 
   constructor(public injector:Injector,
               readonly $state:StateService) {
@@ -46,7 +49,7 @@ export class BcfSingleViewComponent extends WorkPackageSingleViewBase implements
   }
 
   public close() {
-    this.$state.go('^');
+    this.$state.go('^.^');
   }
 
   public switchToFullscreen() {

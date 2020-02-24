@@ -5,9 +5,14 @@ import {CurrentProjectService} from "core-components/projects/current-project.se
 import {WorkPackageTableConfigurationObject} from "core-components/wp-table/wp-table-configuration";
 import { StateService } from '@uirouter/core';
 import {GonService} from "core-app/modules/common/gon/gon.service";
+import {BcfCardViewHandlerRegistry} from "core-app/modules/ifc_models/bcf/list-container/event-handler/bcf-card-view-handler-registry";
+import {WorkPackageViewHandlerToken} from "core-app/modules/work_packages/routing/wp-view-base/event-handling/event-handler-registry";
 
 @Component({
-  templateUrl: './bcf-list-container.component.html'
+  templateUrl: './bcf-list-container.component.html',
+  providers: [
+    { provide: WorkPackageViewHandlerToken, useValue: BcfCardViewHandlerRegistry }
+  ]
 })
 export class BCFListContainerComponent {
   public queryProps:{ [key:string]:any };

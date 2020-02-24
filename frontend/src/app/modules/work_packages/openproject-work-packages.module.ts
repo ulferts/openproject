@@ -477,7 +477,14 @@ import {WorkPackageCreateService} from "core-components/wp-new/wp-create.service
     WorkPackageCreateButtonComponent,
     WorkPackageTypeStatusComponent,
     WorkPackageEditActionsBarComponent,
-    WorkPackageSingleViewComponent
+    WorkPackageSingleViewComponent,
+    WpResizerDirective,
+    WorkPackageBreadcrumbComponent,
+    WorkPackageBreadcrumbParentComponent,
+    WorkPackageSplitViewToolbarComponent,
+    WorkPackageSubjectComponent,
+    WorkPackageWatchersCountComponent,
+    WorkPackageRelationsCountComponent,
   ]
 })
 export class OpenprojectWorkPackagesModule {

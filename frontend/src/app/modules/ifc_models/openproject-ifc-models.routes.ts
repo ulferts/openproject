@@ -34,6 +34,10 @@ import {EmptyComponent} from "core-app/modules/ifc_models/empty/empty-component"
 import {WorkPackageNewSplitViewComponent} from "core-components/wp-new/wp-new-split-view.component";
 import {BCFNewSplitComponent} from "core-app/modules/ifc_models/bcf/new-split/bcf-new-split.component";
 import {BcfSingleViewComponent} from "core-app/modules/ifc_models/bcf/single-view/bcf-single-view.component";
+import {WorkPackageOverviewTabComponent} from "core-components/wp-single-view-tabs/overview-tab/overview-tab.component";
+import {WorkPackageActivityTabComponent} from "core-components/wp-single-view-tabs/activity-panel/activity-tab.component";
+import {WorkPackageRelationsTabComponent} from "core-components/wp-single-view-tabs/relations-tab/relations-tab.component";
+import {WorkPackageWatchersTabComponent} from "core-components/wp-single-view-tabs/watchers-tab/watchers-tab.component";
 
 export const IFC_ROUTES:Ng2StateDeclaration[] = [
   {
@@ -78,14 +82,58 @@ export const IFC_ROUTES:Ng2StateDeclaration[] = [
   },
   {
     name: 'bim.space.defaults.single_bcf',
+    redirectTo: 'bim.space.defaults.single_bcf.overview',
     url: '/details/{workPackageId:[0-9]+}',
     component: IFCViewerPageComponent,
     reloadOnSearch: false,
+    data: {
+      bodyClasses: 'router--work-packages-split-view',
+    },
     views: {
       viewer: { component: IFCViewerComponent },
       // Retarget and by that override the grandparent views
       // https://ui-router.github.io/guide/views#relative-parent-state
       'list@^.^': { component: BcfSingleViewComponent }
+    }
+  },
+  {
+    name: 'bim.space.defaults.single_bcf.overview',
+    url: '/overview',
+    component: WorkPackageOverviewTabComponent,
+    data: {
+      parent: 'bim.space.defaults.single_bcf'
+    }
+  },
+  {
+    name: 'bim.space.defaults.single_bcf.activity',
+    url: '/activity',
+    component: WorkPackageActivityTabComponent,
+    data: {
+      parent: 'bim.space.defaults.single_bcf'
+    }
+  },
+  {
+    name: 'bim.space.defaults.single_bcf.activity.details',
+    url: '/activity/details/#{activity_no:\d+}',
+    component: WorkPackageActivityTabComponent,
+    data: {
+      parent: 'bim.space.defaults.single_bcf'
+    }
+  },
+  {
+    name: 'bim.space.defaults.single_bcf.relations',
+    url: '/relations',
+    component: WorkPackageRelationsTabComponent,
+    data: {
+      parent: 'bim.space.defaults.single_bcf'
+    }
+  },
+  {
+    name: 'bim.space.defaults.single_bcf.watchers',
+    url: '/watchers',
+    component: WorkPackageWatchersTabComponent,
+    data: {
+      parent: 'bim.space.defaults.single_bcf'
     }
   },
   {
