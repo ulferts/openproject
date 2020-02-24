@@ -36,6 +36,7 @@ import {BCFListContainerComponent} from "core-app/modules/ifc_models/bcf/list-co
 import {EmptyComponent} from "core-app/modules/ifc_models/empty/empty-component";
 import {BCFNewSplitComponent} from "core-app/modules/ifc_models/bcf/new-split/bcf-new-split.component";
 import {OpenprojectFieldsModule} from "core-app/modules/fields/openproject-fields.module";
+import {BcfSingleViewComponent} from "core-app/modules/ifc_models/bcf/single-view/bcf-single-view.component";
 
 @NgModule({
   imports: [
@@ -56,6 +57,7 @@ import {OpenprojectFieldsModule} from "core-app/modules/fields/openproject-field
     EmptyComponent,
     BCFListContainerComponent,
     BCFNewSplitComponent,
+    BcfSingleViewComponent,
     IFCViewerComponent
   ],
   exports: [
