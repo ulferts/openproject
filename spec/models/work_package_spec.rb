@@ -95,7 +95,7 @@ describe WorkPackage, type: :model do
     end
 
     describe 'minimal' do
-      let(:work_package_minimal) {
+      let(:work_package_minimal) do
         WorkPackage.new.tap do |w|
           w.attributes = { project_id: project.id,
                            type_id: type.id,
@@ -104,7 +104,7 @@ describe WorkPackage, type: :model do
                            priority: priority,
                            subject: 'test_create' }
         end
-      }
+      end
 
       context 'save' do
         subject { work_package_minimal.save }
@@ -132,10 +132,10 @@ describe WorkPackage, type: :model do
           allow(Setting).to receive(:work_package_group_assignment).and_return(true)
         end
 
-        subject {
+        subject do
           FactoryBot.create(:work_package,
                              assigned_to: group).assigned_to
-        }
+        end
 
         it { is_expected.to eq(group) }
       end
@@ -287,16 +287,16 @@ describe WorkPackage, type: :model do
   end
 
   describe '#destroy' do
-    let(:time_entry_1) {
+    let(:time_entry_1) do
       FactoryBot.create(:time_entry,
                          project: project,
                          work_package: work_package)
-    }
-    let(:time_entry_2) {
+    end
+    let(:time_entry_2) do
       FactoryBot.create(:time_entry,
                          project: project,
                          work_package: work_package)
-    }
+    end
 
     before do
       time_entry_1
@@ -319,30 +319,30 @@ describe WorkPackage, type: :model do
   end
 
   describe '#done_ratio' do
-    let(:status_new) {
+    let(:status_new) do
       FactoryBot.create(:status,
                          name: 'New',
                          is_default: true,
                          is_closed: false,
                          default_done_ratio: 50)
-    }
-    let(:status_assigned) {
+    end
+    let(:status_assigned) do
       FactoryBot.create(:status,
                          name: 'Assigned',
                          is_default: true,
                          is_closed: false,
                          default_done_ratio: 0)
-    }
-    let(:work_package_1) {
+    end
+    let(:work_package_1) do
       FactoryBot.create(:work_package,
                          status: status_new)
-    }
-    let(:work_package_2) {
+    end
+    let(:work_package_2) do
       FactoryBot.create(:work_package,
                          project: work_package_1.project,
                          status: status_assigned,
                          done_ratio: 30)
-    }
+    end
 
     before { work_package_2 }
 
@@ -415,25 +415,25 @@ describe WorkPackage, type: :model do
     let(:type_2) { FactoryBot.create(:type) }
     let(:priority_2) { FactoryBot.create(:priority) }
     let(:project) { FactoryBot.create(:project, types: [type, type_2]) }
-    let(:version_1) {
+    let(:version_1) do
       FactoryBot.create(:version,
                          project: project)
-    }
-    let(:version_2) {
+    end
+    let(:version_2) do
       FactoryBot.create(:version,
                          project: project)
-    }
-    let(:category_1) {
+    end
+    let(:category_1) do
       FactoryBot.create(:category,
                          project: project)
-    }
-    let(:category_2) {
+    end
+    let(:category_2) do
       FactoryBot.create(:category,
                          project: project)
-    }
+    end
     let(:user_2) { FactoryBot.create(:user) }
 
-    let(:work_package_1) {
+    let(:work_package_1) do
       FactoryBot.create(:work_package,
                          author: user,
                          assigned_to: user,
@@ -443,8 +443,8 @@ describe WorkPackage, type: :model do
                          priority: priority,
                          fixed_version: version_1,
                          category: category_1)
-    }
-    let(:work_package_2) {
+    end
+    let(:work_package_2) do
       FactoryBot.create(:work_package,
                          author: user_2,
                          assigned_to: user_2,
@@ -454,7 +454,7 @@ describe WorkPackage, type: :model do
                          priority: priority_2,
                          fixed_version: version_2,
                          category: category_2)
-    }
+    end
 
     before do
       version_1
@@ -521,14 +521,14 @@ describe WorkPackage, type: :model do
     end
 
     context 'by project' do
-      let(:project_2) {
+      let(:project_2) do
         FactoryBot.create(:project,
                            parent: project)
-      }
-      let(:work_package_3) {
+      end
+      let(:work_package_3) do
         FactoryBot.create(:work_package,
                            project: project_2)
-      }
+      end
 
       before { work_package_3 }
 
@@ -560,15 +560,15 @@ describe WorkPackage, type: :model do
   end
 
   describe '#on_active_project' do
-    let(:project_archived) {
+    let(:project_archived) do
       FactoryBot.create(:project,
                          active: false)
-    }
+    end
     let!(:work_package) { FactoryBot.create(:work_package) }
-    let(:work_package_in_archived_project) {
+    let(:work_package_in_archived_project) do
       FactoryBot.create(:work_package,
                          project: project_archived)
-    }
+    end
 
     subject { WorkPackage.on_active_project.length }
 
@@ -585,16 +585,16 @@ describe WorkPackage, type: :model do
 
   describe '#with_author' do
     let(:user) { FactoryBot.create(:user) }
-    let(:project_archived) {
+    let(:project_archived) do
       FactoryBot.create(:project,
                          active: false)
-    }
+    end
     let!(:work_package) { FactoryBot.create(:work_package, author: user) }
-    let(:work_package_in_archived_project) {
+    let(:work_package_in_archived_project) do
       FactoryBot.create(:work_package,
                          project: project_archived,
                          author: user)
-    }
+    end
 
     subject { WorkPackage.with_author(user).length }
 
@@ -771,9 +771,9 @@ describe WorkPackage, type: :model do
   describe '.allowed_target_project_on_move' do
     let(:project) { FactoryBot.create(:project) }
     let(:role) { FactoryBot.create(:role, permissions: [:move_work_packages]) }
-    let(:user) {
+    let(:user) do
       FactoryBot.create(:user, member_in_project: project, member_through_role: role)
-    }
+    end
 
     context 'when having the move_work_packages permission' do
       it 'returns the project' do
@@ -795,9 +795,9 @@ describe WorkPackage, type: :model do
   describe '.allowed_target_project_on_create' do
     let(:project) { FactoryBot.create(:project) }
     let(:role) { FactoryBot.create(:role, permissions: [:add_work_packages]) }
-    let(:user) {
+    let(:user) do
       FactoryBot.create(:user, member_in_project: project, member_through_role: role)
-    }
+    end
 
     context 'when having the add_work_packages permission' do
       it 'returns the project' do
