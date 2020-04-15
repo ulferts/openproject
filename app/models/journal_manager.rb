@@ -157,7 +157,6 @@ class JournalManager
     # TODO:
     #  * normalize strings
     #  * fix wp parent_id
-    #  * get it to work for attachments (has no attachments association)
     data_columns = (journal_class(journable.class).column_names - %w(id journal_id parent_id)).map do |column_name|
       "(#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})"
     end
@@ -173,20 +172,24 @@ class JournalManager
            AND journals.journable_type = '#{journable.class.name}'
            AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = #{journable.id} AND journable_type = '#{journable.class.name}')
       ),
-      #{data_table_name} AS (
+      data_changes AS (
         SELECT
-          #{data_table_name}.*,
           max_journals.journable_id
         FROM
           max_journals
         JOIN
           #{data_table_name}
         ON
-        #{data_table_name}.journal_id = max_journals.id
+          #{data_table_name}.journal_id = max_journals.id
+        JOIN
+          #{journable_table_name}
+        ON
+          #{journable_table_name}.id = max_journals.journable_id
+        WHERE
+          #{data_columns.join(' OR ')}
       ),
-      attachable_journals AS (
+      attachable_changes AS (
         SELECT
-          attachable_journals.*,
           max_journals.journable_id
         FROM
           max_journals
@@ -194,11 +197,18 @@ class JournalManager
           attachable_journals
         ON
           attachable_journals.journal_id = max_journals.id
+        FULL JOIN
+          attachments
+        ON
+          attachments.container_id = #{journable.id}
+          AND attachments.container_type = '#{journable.class.name}'
+          AND attachments.container_id = max_journals.journable_id
+        WHERE
+          (attachments.id IS NULL AND attachable_journals.attachment_id IS NOT NULL)
+          OR (attachable_journals.attachment_id IS NULL AND attachments.id IS NOT NULL)
       ),
-      customizable_journals AS (
+      customizable_changes AS (
         SELECT
-          customizable_journals.custom_field_id,
-          customizable_journals.value,
           max_journals.journable_id
         FROM
           max_journals
@@ -206,42 +216,30 @@ class JournalManager
           customizable_journals
         ON
           customizable_journals.journal_id = max_journals.id
+        FULL JOIN
+          custom_values
+        ON
+          custom_values.customized_id = #{journable.id}
+          AND custom_values.customized_type = '#{journable.class.name}'
+          AND custom_values.customized_id = max_journals.journable_id
+        WHERE
+          (custom_values.value IS NULL AND customizable_journals.value IS NOT NULL)
+          OR (customizable_journals.value IS NULL AND custom_values.value IS NOT NULL AND custom_values.value != '')
+          OR (customizable_journals.value != custom_values.value)
       )
 
       SELECT
         COUNT(*)
       FROM
-        #{journable_table_name}
-      LEFT OUTER JOIN
-        custom_values
-      ON
-        custom_values.customized_id = #{journable_table_name}.id AND custom_values.customized_type = '#{journable.class.name}'
-      LEFT OUTER JOIN
-        attachments
-      ON
-        attachments.container_id = #{journable_table_name}.id AND attachments.container_type = '#{journable.class.name}'
-      JOIN
-        #{data_table_name}
-      ON
-        #{journable_table_name}.id = #{data_table_name}.journable_id
+        data_changes
       FULL JOIN
-        customizable_journals
+        customizable_changes
       ON
-        custom_values.custom_field_id = customizable_journals.custom_field_id
+        customizable_changes.journable_id = data_changes.journable_id
       FULL JOIN
-        attachable_journals
+        attachable_changes
       ON
-        attachments.id = attachable_journals.attachment_id
-      WHERE
-        (#{journable_table_name}.id = #{journable.id} OR #{journable_table_name}.id IS NULL)
-        AND (
-          (custom_values.value IS NULL AND customizable_journals.value IS NOT NULL)
-          OR (customizable_journals.value IS NULL AND custom_values.value IS NOT NULL AND custom_values.value != '')
-          OR (customizable_journals.value != custom_values.value)
-          OR (attachments.id IS NULL AND attachable_journals.attachment_id IS NOT NULL)
-          OR (attachable_journals.attachment_id IS NULL AND attachments.id IS NOT NULL)
-          OR #{data_columns.join(' OR ')}
-        )
+        attachable_changes.journable_id = data_changes.journable_id
       LIMIT 1
     SQL
 
