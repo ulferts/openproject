@@ -151,16 +151,6 @@ class JournalManager
   end
 
   def self.changed?(journable)
-    journable_table_name = journable.class.table_name
-    data_table_name = journal_class(journable.class).table_name
-
-    # TODO:
-    #  * normalize strings
-    #  * fix wp parent_id
-    data_columns = (journal_class(journable.class).column_names - %w(id journal_id parent_id)).map do |column_name|
-      "(#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})"
-    end
-
     sql = <<~SQL
       WITH max_journals AS (
          SELECT
@@ -171,79 +161,101 @@ class JournalManager
            journals.journable_id = #{journable.id}
            AND journals.journable_type = '#{journable.class.name}'
            AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = #{journable.id} AND journable_type = '#{journable.class.name}')
-      ),
-      data_changes AS (
-        SELECT
-          max_journals.journable_id
-        FROM
-          max_journals
-        JOIN
-          #{data_table_name}
-        ON
-          #{data_table_name}.journal_id = max_journals.id
-        JOIN
-          #{journable_table_name}
-        ON
-          #{journable_table_name}.id = max_journals.journable_id
-        WHERE
-          #{data_columns.join(' OR ')}
-      ),
-      attachable_changes AS (
-        SELECT
-          max_journals.journable_id
-        FROM
-          max_journals
-        LEFT OUTER JOIN
-          attachable_journals
-        ON
-          attachable_journals.journal_id = max_journals.id
-        FULL JOIN
-          attachments
-        ON
-          attachments.container_id = #{journable.id}
-          AND attachments.container_type = '#{journable.class.name}'
-          AND attachments.container_id = max_journals.journable_id
-        WHERE
-          (attachments.id IS NULL AND attachable_journals.attachment_id IS NOT NULL)
-          OR (attachable_journals.attachment_id IS NULL AND attachments.id IS NOT NULL)
-      ),
-      customizable_changes AS (
-        SELECT
-          max_journals.journable_id
-        FROM
-          max_journals
-        LEFT OUTER JOIN
-          customizable_journals
-        ON
-          customizable_journals.journal_id = max_journals.id
-        FULL JOIN
-          custom_values
-        ON
-          custom_values.customized_id = #{journable.id}
-          AND custom_values.customized_type = '#{journable.class.name}'
-          AND custom_values.customized_id = max_journals.journable_id
-        WHERE
-          (custom_values.value IS NULL AND customizable_journals.value IS NOT NULL)
-          OR (customizable_journals.value IS NULL AND custom_values.value IS NOT NULL AND custom_values.value != '')
-          OR (customizable_journals.value != custom_values.value)
       )
 
       SELECT
         COUNT(*)
       FROM
-        data_changes
+        (#{data_changes_sql(journable)}) data_changes
       FULL JOIN
-        customizable_changes
+        (#{customizable_changes_sql(journable)}) customizable_changes
       ON
         customizable_changes.journable_id = data_changes.journable_id
       FULL JOIN
-        attachable_changes
+        (#{attachable_changes_sql(journable)}) attachable_changes
       ON
         attachable_changes.journable_id = data_changes.journable_id
       LIMIT 1
     SQL
 
     ActiveRecord::Base.connection.select_one(sql)['count'].positive?
+  end
+
+  # TODO: turn private
+  def self.attachable_changes_sql(journable)
+    <<~SQL
+      SELECT
+        max_journals.journable_id
+      FROM
+        max_journals
+      LEFT OUTER JOIN
+        attachable_journals
+      ON
+        attachable_journals.journal_id = max_journals.id
+      FULL JOIN
+        attachments
+      ON
+        attachments.container_id = #{journable.id}
+        AND attachments.container_type = '#{journable.class.name}'
+        AND attachments.container_id = max_journals.journable_id
+      WHERE
+        (attachments.id IS NULL AND attachable_journals.attachment_id IS NOT NULL)
+        OR (attachable_journals.attachment_id IS NULL AND attachments.id IS NOT NULL)
+    SQL
+  end
+
+  # TODO: turn private
+  def self.customizable_changes_sql(journable)
+    <<~SQL
+      SELECT
+        max_journals.journable_id
+      FROM
+        max_journals
+      LEFT OUTER JOIN
+        customizable_journals
+      ON
+        customizable_journals.journal_id = max_journals.id
+      FULL JOIN
+        custom_values
+      ON
+        custom_values.customized_id = #{journable.id}
+        AND custom_values.customized_type = '#{journable.class.name}'
+        AND custom_values.customized_id = max_journals.journable_id
+      WHERE
+        (custom_values.value IS NULL AND customizable_journals.value IS NOT NULL)
+        OR (customizable_journals.value IS NULL AND custom_values.value IS NOT NULL AND custom_values.value != '')
+        OR (customizable_journals.value != custom_values.value)
+    SQL
+  end
+
+  # TODO: turn private
+  def self.data_changes_sql(journable)
+    journable_table_name = journable.class.table_name
+    data_table_name = journal_class(journable.class).table_name
+
+    # TODO:
+    #  * normalize strings
+    #  * fix wp parent_id
+    data_columns = (journal_class(journable.class).column_names - %w(id journal_id parent_id)).map do |column_name|
+      "(#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})"
+    end
+
+    <<~SQL
+      SELECT
+        max_journals.journable_id
+      FROM
+        max_journals
+      JOIN
+        #{data_table_name}
+      ON
+        #{data_table_name}.journal_id = max_journals.id
+      JOIN
+        #{journable_table_name}
+      ON
+        #{journable_table_name}.id = max_journals.journable_id
+      WHERE
+        #{data_columns.join(' OR ')}
+    SQL
   end
 
   def self.recreate_initial_journal(type, journal, changed_data)
