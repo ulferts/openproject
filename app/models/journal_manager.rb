@@ -151,58 +151,101 @@ class JournalManager
   end
 
   def self.changed?(journable)
-    if (journable.journals.loaded? ? journable.journals.size : journable.journals.count) > 0
-      changed = attributes_changed? journable
-      changed ||= association_changed? journable, 'attachable', :attachments, :id, :attachment_id, :filename
-      changed ||= association_changed? journable, 'customizable', :custom_values, :custom_field_id, :custom_field_id, :value
+    journable_table_name = journable.class.table_name
+    data_table_name = journal_class(journable.class).table_name
 
-      changed
-    else
-      true
+    # TODO:
+    #  * normalize strings
+    #  * fix wp parent_id
+    #  * get it to work for attachments (has no attachments association)
+    data_columns = (journal_class(journable.class).column_names - %w(id journal_id parent_id)).map do |column_name|
+      "(#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})"
     end
-  end
 
-  def self.attributes_changed?(journable)
-    type = base_class(journable.class)
-    current = valid_journal_attributes type, journable.attributes
-    predecessor = journable.journals.last.data.journaled_attributes
+    sql = <<~SQL
+      WITH max_journals AS (
+         SELECT
+           *
+         FROM
+           journals
+         WHERE
+           journals.journable_id = #{journable.id}
+           AND journals.journable_type = '#{journable.class.name}'
+           AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = #{journable.id} AND journable_type = '#{journable.class.name}')
+      ),
+      #{data_table_name} AS (
+        SELECT
+          #{data_table_name}.*,
+          max_journals.journable_id
+        FROM
+          max_journals
+        JOIN
+          #{data_table_name}
+        ON
+        #{data_table_name}.journal_id = max_journals.id
+      ),
+      attachable_journals AS (
+        SELECT
+          attachable_journals.*,
+          max_journals.journable_id
+        FROM
+          max_journals
+        LEFT OUTER JOIN
+          attachable_journals
+        ON
+          attachable_journals.journal_id = max_journals.id
+      ),
+      customizable_journals AS (
+        SELECT
+          customizable_journals.custom_field_id,
+          customizable_journals.value,
+          max_journals.journable_id
+        FROM
+          max_journals
+        LEFT OUTER JOIN
+          customizable_journals
+        ON
+          customizable_journals.journal_id = max_journals.id
+      )
 
-    current = normalize_newlines(current)
-    predecessor = normalize_newlines(predecessor)
+      SELECT
+        COUNT(*)
+      FROM
+        #{journable_table_name}
+      LEFT OUTER JOIN
+        custom_values
+      ON
+        custom_values.customized_id = #{journable_table_name}.id AND custom_values.customized_type = '#{journable.class.name}'
+      LEFT OUTER JOIN
+        attachments
+      ON
+        attachments.container_id = #{journable_table_name}.id AND attachments.container_type = '#{journable.class.name}'
+      JOIN
+        #{data_table_name}
+      ON
+        #{journable_table_name}.id = #{data_table_name}.journable_id
+      FULL JOIN
+        customizable_journals
+      ON
+        custom_values.custom_field_id = customizable_journals.custom_field_id
+      FULL JOIN
+        attachable_journals
+      ON
+        attachments.id = attachable_journals.attachment_id
+      WHERE
+        (#{journable_table_name}.id = #{journable.id} OR #{journable_table_name}.id IS NULL)
+        AND (
+          (custom_values.value IS NULL AND customizable_journals.value IS NOT NULL)
+          OR (customizable_journals.value IS NULL AND custom_values.value IS NOT NULL AND custom_values.value != '')
+          OR (customizable_journals.value != custom_values.value)
+          OR (attachments.id IS NULL AND attachable_journals.attachment_id IS NOT NULL)
+          OR (attachable_journals.attachment_id IS NULL AND attachments.id IS NOT NULL)
+          OR #{data_columns.join(' OR ')}
+        )
+      LIMIT 1
+    SQL
 
-    # we generally ignore changes from blank to blank
-    predecessor
-      .any? { |k, v| current[k.to_s] != v && (v.present? || current[k.to_s].present?) }
-  end
-
-  def self.association_changed?(journable, journal_association, association, id, key, value)
-    if journable.respond_to? association
-      journal_assoc_name = "#{journal_association}_journals"
-      current = journable.send(association).map { |a| { key.to_s => a.send(id), value.to_s => a.send(value) } }
-      predecessor = journable.journals.last.send(journal_assoc_name).map(&:attributes)
-
-      current = remove_empty_associations(current, value.to_s)
-
-      changes = JournalManager.changes_on_association(current, predecessor, association, key, value)
-
-      !changes.empty?
-    else
-      false
-    end
-  end
-
-  # associations have value attributes ('value' for custom values and 'filename'
-  # for attachments). This method ensures that blank value attributes are
-  # treated like non-existing associations. Thus, this prevents that
-  # non-existing associations (nil) are different to blank associations ("").
-  # This would lead to false change information, otherwise.
-  # We need to be careful though, because we want to accept false (and false.blank? == true)
-  def self.remove_empty_associations(associations, value)
-    associations.reject do |association|
-      association.has_key?(value) &&
-        association[value].blank? &&
-        association[value] != false
-    end
+    ActiveRecord::Base.connection.select_one(sql)['count'].positive?
   end
 
   def self.recreate_initial_journal(type, journal, changed_data)
