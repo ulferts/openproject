@@ -204,7 +204,9 @@ class JournalManager
     SQL
   end
 
-  # TODO: turn private
+  # TODO:
+  #  * turn private
+  #  * normalize strings
   def self.customizable_changes_sql(journable)
     <<~SQL
       SELECT
@@ -258,6 +260,7 @@ class JournalManager
     SQL
   end
 
+  # TODO: use add_journal method to do so
   def self.recreate_initial_journal(type, journal, changed_data)
     if journal.data.nil?
       journal.data = create_journal_data journal.id, type, changed_data.except(:id)
@@ -286,22 +289,123 @@ class JournalManager
 
     Rails.logger.debug "Inserting new journal for #{journable_type} ##{journable.id} @ #{version}"
 
-    journal_attributes = { journable_id: journable.id,
-                           journable_type: journal_class_name(journable.class),
-                           version: version,
-                           activity_type: journable.send(:activity_type),
-                           details: journable_details(journable) }
-
-    journal = create_journal journable, journal_attributes, user, notes
-
     # FIXME: this is required for the association to be correctly saved...
-    journable.journals.select(&:new_record?)
+    journal_sql = <<~SQL
+      INSERT INTO
+        journals (
+          journable_id,
+          journable_type,
+          version,
+          activity_type,
+          user_id,
+          notes,
+          created_at
+        )
+      VALUES (
+        :journable_id,
+        :journable_type,
+        :version,
+        :activity_type,
+        :user_id,
+        :notes,
+        now()
+      )
+      RETURNING *
+    SQL
 
-    journal.save!
+    sanitized = ::OpenProject::SqlSanitization.sanitize(journal_sql,
+                                                        notes: notes,
+                                                        journable_id: journable.id,
+                                                        activity_type: journable.send(:activity_type),
+                                                        journable_type: journable.class,
+                                                        user_id: user.id,
+                                                        version: version)
 
+    result = ::JournalVersion
+             .connection
+             .select_one(sanitized)
+
+    journal = Journal.instantiate(result)
+
+    if journal
+      # TODO:
+      # * fix parent_id
+      # * generalize for non wp
+      text_column_names = WorkPackage.columns_hash.select { |_, v| v.type == :text }.keys
+      wp_column_names = Journal::WorkPackageJournal.column_names - %w[id journal_id parent_id]
+
+      # ensure the text_columns of the sink are sorted the same as the one of the source
+      sink_selects = wp_column_names - text_column_names + text_column_names
+      source_selects = wp_column_names - text_column_names + text_column_names.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
+
+      data_sql = <<~SQL
+        INSERT INTO
+          work_package_journals (
+            journal_id,
+            #{sink_selects.join(', ')}
+          )
+        SELECT
+          #{journal.id},
+          #{source_selects.join(', ')}
+        FROM work_packages
+        WHERE work_packages.id = #{journable.id}
+      SQL
+
+      Journal::WorkPackageJournal
+        .connection
+        .execute(data_sql)
+
+      attachment_sql = <<~SQL
+        INSERT INTO
+          attachable_journals (
+            journal_id,
+            attachment_id,
+            filename
+          )
+        SELECT
+          #{journal.id},
+          id,
+          file
+        FROM attachments
+        WHERE
+          attachments.container_id = #{journable.id}
+          AND attachments.container_type = '#{journable.class.name}'
+      SQL
+
+      Journal::AttachableJournal
+        .connection
+        .execute(attachment_sql)
+
+      # TODO: write migration to split up the existing migrations for multi select lists
+      custom_value_sql = <<~SQL
+        INSERT INTO
+          customizable_journals (
+            journal_id,
+            custom_field_id,
+            value
+          )
+        SELECT
+          #{journal.id},
+          custom_field_id,
+          value
+        FROM custom_values
+        WHERE
+          custom_values.customized_id = #{journable.id}
+          AND custom_values.customized_type = '#{journable.class.name}'
+          AND custom_values.value IS NOT NULL
+          AND custom_values.value != ''
+      SQL
+
+      Journal::CustomizableJournal
+        .connection
+        .execute(custom_value_sql)
+    end
+
+    # TODO: touch journable after creation, see Journal#touch_journable
     journal
   end
 
+  # TODO remove external version table as we now have mutexes
   def self.increment_version!(journable_type, journable_id)
     sql = <<~SQL
       UPDATE #{JournalVersion.table_name}
@@ -315,38 +419,6 @@ class JournalManager
       .connection
       .execute(sanitized)
       .first['version']
-  end
-
-  def self.create_journal(journable, journal_attributes, user = User.current, notes = '')
-    type = base_class(journable.class)
-    extended_journal_attributes = journal_attributes
-      .merge(journable_type: type.to_s)
-      .merge(notes: notes)
-      .except(:details)
-      .except(:id)
-
-    unless extended_journal_attributes.has_key? :user_id
-      extended_journal_attributes[:user_id] = user.id
-    end
-
-    journal_attributes[:details] = normalize_newlines(journal_attributes[:details])
-
-    journal = journable.journals.build extended_journal_attributes
-    journal.data = create_journal_data journal.id,
-                                       type,
-                                       valid_journal_attributes(type, journal_attributes[:details])
-
-    create_association_data journable, journal
-
-    journal
-  end
-
-  def self.valid_journal_attributes(type, changed_data)
-    journal_class = journal_class type
-    journal_class_attributes = journal_class.columns.map(&:name)
-
-    valid_journal_attributes = changed_data.select { |k, _v| journal_class_attributes.include?(k.to_s) }
-    valid_journal_attributes.except :id, :updated_at, :updated_on
   end
 
   def self.create_journal_data(_journal_id, type, changed_data)

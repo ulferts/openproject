@@ -44,8 +44,8 @@ module JournalChanges
                    result
                  end
     else
-      normalized_new_data = JournalManager.normalize_newlines(data.journaled_attributes)
-      normalized_old_data = JournalManager.normalize_newlines(predecessor.data.journaled_attributes)
+      normalized_new_data = normalize_newlines(data.journaled_attributes)
+      normalized_old_data = normalize_newlines(predecessor.data.journaled_attributes)
 
       normalized_new_data.select { |attribute, new_value|
         # we dont record changes for changes from nil to empty strings and vice versa
@@ -74,6 +74,12 @@ module JournalChanges
       old_journals = predecessor.send(journal_assoc_name).map(&:attributes)
 
       JournalManager.changes_on_association(new_journals, old_journals, association, key, value)
+    end
+  end
+
+  def normalize_newlines(data)
+    data.each_with_object({}) do |e, h|
+      h[e[0]] = (e[1].is_a?(String) ? e[1].gsub(/\r\n/, "\n") : e[1])
     end
   end
 end
