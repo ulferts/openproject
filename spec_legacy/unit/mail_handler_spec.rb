@@ -314,7 +314,6 @@ describe MailHandler, type: :model do
   end
 
   it 'should add work package note with attribute changes' do
-    WorkPackage.find(2).recreate_initial_journal!
     # This email contains: 'Status: Resolved'
     journal = submit_email('ticket_reply_with_status.eml')
     assert journal.data.is_a?(Journal::WorkPackageJournal)
@@ -334,7 +333,6 @@ describe MailHandler, type: :model do
   end
 
   it 'should add work package note should send email notification' do
-    WorkPackage.find(2).recreate_initial_journal!
     journal = submit_email('ticket_reply.eml')
     assert journal.is_a?(Journal)
     assert_equal 3, ActionMailer::Base.deliveries.size

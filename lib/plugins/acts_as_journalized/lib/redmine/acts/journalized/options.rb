@@ -105,9 +105,6 @@ module Redmine::Acts::Journalized
       def options_with_defaults(options)
         journal_options = split_option_hashes(options)
 
-        journal_options[:except] ||= []
-        journal_options[:except] += [primary_key, inheritance_column, :updated_on, :updated_at, :lock_version, :lft, :rgt]
-
         result_options = journal_options.symbolize_keys
         result_options.reverse_merge!(
           class_name: Journal.name,

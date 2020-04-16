@@ -96,45 +96,6 @@ class JournalManager
       base_class(type).name
     end
 
-    def create_association_data(journable, journal)
-      create_attachment_data journable, journal if journable.respond_to? :attachments
-      create_custom_field_data journable, journal if journable.respond_to? :custom_values
-    end
-
-    def create_attachment_data(journable, journal)
-      journable.attachments.each do |a|
-        journal.attachable_journals.build attachment: a, filename: a.filename
-      end
-    end
-
-    def create_custom_field_data(journable, journal)
-      journable.custom_values.group_by(&:custom_field).each do |custom_field, custom_values|
-        # Consider only custom values with non-blank values. Otherwise,
-        # non-existing custom values are different to custom values with an empty
-        # value.
-        # Mind that false.present? == false, but we don't consider false this being "blank"...
-        # This does not matter when we use stringly typed values (as in the database),
-        # but it matters when we use real types
-        valid_values = custom_values.select { |cv| cv.value.present? || cv.value == false }
-
-        if custom_field.multi_value? && valid_values.any?
-          build_multi_value_custom_field_journal! journal, custom_field, valid_values
-        elsif valid_values.any?
-          build_custom_field_journal! journal, custom_field, valid_values.first
-        end
-      end
-    end
-
-    def build_multi_value_custom_field_journal!(journal, custom_field, custom_values)
-      value = custom_values.map(&:value).join(",") # comma separated custom option IDs
-
-      journal.customizable_journals.build custom_field_id: custom_field.id, value: value
-    end
-
-    def build_custom_field_journal!(journal, custom_field, custom_value)
-      journal.customizable_journals.build custom_field_id: custom_field.id, value: custom_value.value
-    end
-
     def select_and_combine(journals, id, key, value)
       selected_journals = journals.select { |j| j[key] == id }.map { |j| j[value] }
 
@@ -238,7 +199,7 @@ class JournalManager
     # TODO:
     #  * normalize strings
     #  * fix wp parent_id
-    data_columns = (journal_class(journable.class).column_names - %w(id journal_id parent_id)).map do |column_name|
+    data_columns = (journable.journaled_columns_names - %i(parent_id)).map do |column_name|
       "(#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})"
     end
 
@@ -258,22 +219,6 @@ class JournalManager
       WHERE
         #{data_columns.join(' OR ')}
     SQL
-  end
-
-  # TODO: use add_journal method to do so
-  def self.recreate_initial_journal(type, journal, changed_data)
-    if journal.data.nil?
-      journal.data = create_journal_data journal.id, type, changed_data.except(:id)
-    else
-      journal.changed_data = changed_data
-      journal.attachable_journals.delete_all
-      journal.customizable_journals.delete_all
-    end
-
-    create_association_data journal.journable, journal
-
-    journal.save!
-    journal.reload
   end
 
   def self.add_journal!(journable, user = User.current, notes = '')
@@ -316,7 +261,7 @@ class JournalManager
     sanitized = ::OpenProject::SqlSanitization.sanitize(journal_sql,
                                                         notes: notes,
                                                         journable_id: journable.id,
-                                                        activity_type: journable.send(:activity_type),
+                                                        activity_type: journable.activity_type,
                                                         journable_type: journable.class,
                                                         user_id: user.id,
                                                         version: version)
@@ -331,24 +276,24 @@ class JournalManager
       # TODO:
       # * fix parent_id
       # * generalize for non wp
-      text_column_names = WorkPackage.columns_hash.select { |_, v| v.type == :text }.keys
-      wp_column_names = Journal::WorkPackageJournal.column_names - %w[id journal_id parent_id]
+      journaled_column_names = journable.journaled_columns_names - %i[parent_id]
+      text_column_names = journable.class.columns_hash.select { |_, v| v.type == :text }.keys.map(&:to_sym) & journaled_column_names
 
       # ensure the text_columns of the sink are sorted the same as the one of the source
-      sink_selects = wp_column_names - text_column_names + text_column_names
-      source_selects = wp_column_names - text_column_names + text_column_names.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
+      sink_selects = journaled_column_names - text_column_names + text_column_names
+      source_selects = journaled_column_names - text_column_names + text_column_names.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
 
       data_sql = <<~SQL
         INSERT INTO
-          work_package_journals (
+          #{journal_class(journable.class).table_name} (
             journal_id,
             #{sink_selects.join(', ')}
           )
         SELECT
           #{journal.id},
           #{source_selects.join(', ')}
-        FROM work_packages
-        WHERE work_packages.id = #{journable.id}
+        FROM #{journable.class.table_name}
+        WHERE #{journable.class.table_name}.id = #{journable.id}
       SQL
 
       Journal::WorkPackageJournal
