@@ -65,11 +65,8 @@ module Redmine
           name.underscore.pluralize
         end
 
-        # This call will add an activity and, if neccessary, start the journaling and
-        # add an event callback on the model.
-        # Versioning and acting as an Event may only be applied once.
-        # To apply more than on activity, use acts_as_activity
-        def acts_as_journalized(options = {}, &block)
+        # This call will start journaling the model.
+        def acts_as_journalized(options = {})
           return if journaled?
 
           include_aaj_modules
@@ -78,7 +75,7 @@ module Redmine
 
           has_many :journals, -> {
             order("#{Journal.table_name}.version ASC")
-          }, journal_hash, &block
+          }, journal_hash
         end
 
         private

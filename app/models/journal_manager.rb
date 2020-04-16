@@ -198,10 +198,11 @@ class JournalManager
 
     # TODO:
     #  * normalize strings
-    #  * fix wp parent_id
-    data_columns = (journable.journaled_columns_names - %i(parent_id)).map do |column_name|
+    data_columns = journable.journaled_columns_names.map do |column_name|
       "(#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})"
     end
+
+    additional_source_sql = journable.class.vestal_journals_options[:data_sql]&.call(journable) || ''
 
     <<~SQL
       SELECT
@@ -213,7 +214,7 @@ class JournalManager
       ON
         #{data_table_name}.journal_id = max_journals.id
       JOIN
-        #{journable_table_name}
+        (SELECT * FROM #{journable_table_name} #{additional_source_sql}) #{journable_table_name}
       ON
         #{journable_table_name}.id = max_journals.journable_id
       WHERE
@@ -276,12 +277,14 @@ class JournalManager
       # TODO:
       # * fix parent_id
       # * generalize for non wp
-      journaled_column_names = journable.journaled_columns_names - %i[parent_id]
+      journaled_column_names = journable.journaled_columns_names
       text_column_names = journable.class.columns_hash.select { |_, v| v.type == :text }.keys.map(&:to_sym) & journaled_column_names
 
       # ensure the text_columns of the sink are sorted the same as the one of the source
       sink_selects = journaled_column_names - text_column_names + text_column_names
       source_selects = journaled_column_names - text_column_names + text_column_names.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
+
+      additional_source_sql = journable.class.vestal_journals_options[:data_sql]&.call(journable) || ''
 
       data_sql = <<~SQL
         INSERT INTO
@@ -293,10 +296,11 @@ class JournalManager
           #{journal.id},
           #{source_selects.join(', ')}
         FROM #{journable.class.table_name}
+        #{additional_source_sql}
         WHERE #{journable.class.table_name}.id = #{journable.id}
       SQL
 
-      Journal::WorkPackageJournal
+      journal_class(journable.class)
         .connection
         .execute(data_sql)
 
@@ -364,13 +368,6 @@ class JournalManager
       .connection
       .execute(sanitized)
       .first['version']
-  end
-
-  def self.create_journal_data(_journal_id, type, changed_data)
-    journal_class = journal_class type
-    new_data = Hash[changed_data.map { |k, v| [k, (v.is_a? Array) ? v.last : v] }]
-
-    journal_class.new new_data
   end
 
   def self.update_user_references(current_user_id, substitute_id)

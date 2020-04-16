@@ -96,7 +96,7 @@ module Redmine::Acts::Journalized
                                          end
         end
 
-        assign_vestal.call(:calculate, false)
+        assign_vestal.call(:data_sql, false)
 
         result
       end
