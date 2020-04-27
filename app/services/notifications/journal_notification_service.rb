@@ -47,7 +47,7 @@ class Notifications::JournalNotificationService
 
     # Send the notification on behalf of the predecessor in case it could not send it on its own
     def notify_for_wp_predecessor(journal, send_mails)
-      aggregated = find_aggregated_journal_for(journal)
+      aggregated = Journal.uncached { find_aggregated_journal_for(journal) }
 
       # TODO: Check whether this edge case still applies as I believe that the journals are now aggregated
       # differently:

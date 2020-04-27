@@ -112,6 +112,7 @@ class JournalManager
   end
 
   def self.changed?(journable)
+    # TODO: this should return true if no journal exists
     sql = <<~SQL
       WITH max_journals AS (
          SELECT
@@ -136,7 +137,6 @@ class JournalManager
         (#{attachable_changes_sql(journable)}) attachable_changes
       ON
         attachable_changes.journable_id = data_changes.journable_id
-      LIMIT 1
     SQL
 
     ActiveRecord::Base.connection.select_one(sql)['count'].positive?
@@ -154,11 +154,11 @@ class JournalManager
       ON
         attachable_journals.journal_id = max_journals.id
       FULL JOIN
-        attachments
+        (SELECT *
+         FROM attachments
+         WHERE attachments.container_id = #{journable.id} AND attachments.container_type = '#{journable.class.name}') attachments
       ON
-        attachments.container_id = #{journable.id}
-        AND attachments.container_type = '#{journable.class.name}'
-        AND attachments.container_id = max_journals.journable_id
+        attachments.container_id = max_journals.journable_id
       WHERE
         (attachments.id IS NULL AND attachable_journals.attachment_id IS NOT NULL)
         OR (attachable_journals.attachment_id IS NULL AND attachments.id IS NOT NULL)
@@ -179,11 +179,11 @@ class JournalManager
       ON
         customizable_journals.journal_id = max_journals.id
       FULL JOIN
-        custom_values
+        (SELECT *
+         FROM custom_values
+         WHERE custom_values.customized_id = #{journable.id} AND custom_values.customized_type = '#{journable.class.name}') custom_values
       ON
-        custom_values.customized_id = #{journable.id}
-        AND custom_values.customized_type = '#{journable.class.name}'
-        AND custom_values.customized_id = max_journals.journable_id
+        custom_values.customized_id = max_journals.journable_id
       WHERE
         (custom_values.value IS NULL AND customizable_journals.value IS NOT NULL)
         OR (customizable_journals.value IS NULL AND custom_values.value IS NOT NULL AND custom_values.value != '')
@@ -351,6 +351,7 @@ class JournalManager
     end
 
     # TODO: touch journable after creation, see Journal#touch_journable
+    journable.journals.reload if journable.journals.loaded?
     journal
   end
 
