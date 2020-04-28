@@ -93,8 +93,6 @@ describe MessagesController, type: :controller do
       describe 'add' do
         before do
           allow_any_instance_of(Message).to receive(:editable_by?).and_return(true)
-
-          allow_any_instance_of(Attachment).to receive(:filename).and_return(filename)
         end
 
         context 'journal' do
@@ -113,7 +111,7 @@ describe MessagesController, type: :controller do
           describe '#value' do
             subject { message.journals.last.details[attachment_id].last }
 
-            it { is_expected.to eq(filename) }
+            it { is_expected.to eq(attachment.filename) }
           end
         end
       end
