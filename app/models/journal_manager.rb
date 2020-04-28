@@ -360,6 +360,8 @@ class JournalManager
 
     # TODO: touch journable after creation, see Journal#touch_journable
     journable.journals.reload if journable.journals.loaded?
+    # TODO: find new solution for touching the journable
+    journal.send(:touch_journable)
     journal
   end
 
