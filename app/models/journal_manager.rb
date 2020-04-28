@@ -121,8 +121,8 @@ class JournalManager
            journals
          WHERE
            journals.journable_id = #{journable.id}
-           AND journals.journable_type = '#{journable.class.name}'
-           AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = #{journable.id} AND journable_type = '#{journable.class.name}')
+           AND journals.journable_type = '#{journable.class.base_class}'
+           AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = #{journable.id} AND journable_type = '#{journable.class.base_class}')
       )
 
       SELECT
@@ -276,7 +276,7 @@ class JournalManager
                                                         notes: notes,
                                                         journable_id: journable.id,
                                                         activity_type: journable.activity_type,
-                                                        journable_type: journable.class,
+                                                        journable_type: journable.class.base_class,
                                                         user_id: user.id,
                                                         version: version)
 
