@@ -303,8 +303,8 @@ describe MailHandler, type: :model do
 
   specify 'reply to issue update (Journal) by message_id' do
     Journal.delete_all
-    issue = WorkPackage.find(2)
-    j = FactoryBot.create :work_package_journal, id: 3, journable_id: issue.id
+    FactoryBot.create :work_package_journal, id: 3, version: 1, journable_id: 2
+    JournalVersion.create(journable_type: 'WorkPackage', journable_id: 2, version: 1)
     journal = submit_email('ticket_reply_by_message_id.eml')
     assert journal.data.is_a?(Journal::WorkPackageJournal), "Email was a #{journal.data.class}"
     assert_equal User.find_by_login('jsmith'), journal.user

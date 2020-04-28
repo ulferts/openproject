@@ -200,8 +200,6 @@ class JournalManager
 
     text_columns = text_column_names(journable)
 
-    # TODO:
-    #  * normalize strings
     data_columns = (journable.journaled_columns_names - text_columns).map do |column_name|
       <<~SQL
         (#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})
@@ -382,7 +380,7 @@ class JournalManager
   end
 
   def self.update_user_references(current_user_id, substitute_id)
-    foreign_keys = ['author_id', 'user_id', 'assigned_to_id', 'responsible_id']
+    foreign_keys = %w[author_id user_id assigned_to_id responsible_id]
 
     Journal::BaseJournal.subclasses.each do |klass|
       foreign_keys.each do |foreign_key|
