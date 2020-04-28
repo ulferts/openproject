@@ -29,19 +29,19 @@
 require 'spec_helper'
 
 describe JournalManager, type: :model do
-  describe '#self.changed?' do
+  describe '.changed?' do
     let(:journable) do
       FactoryBot.create(:work_package, description: old).tap do |journable|
-        # replace newline character and apply another change
-        journable.assign_attributes description: changed
+        # alter description without triggering after_save hooks of aaj
+        journable.update_columns description: changed
       end
     end
+
+    subject { JournalManager.changed? journable }
 
     context 'when only the newline character representation has changed' do
       let(:old) { "Description\nContains newline character" }
       let(:changed) { old.gsub("\n", "\r\n") }
-
-      subject { JournalManager.changed? journable }
 
       it { is_expected.to be_falsey }
     end
@@ -50,16 +50,12 @@ describe JournalManager, type: :model do
       let(:old) { nil }
       let(:changed) { '' }
 
-      subject { JournalManager.changed? journable }
-
       it { is_expected.to be_falsey }
     end
 
     context 'when changed value is nil and old value is an empty string' do
       let(:old) { '' }
       let(:changed) { nil }
-
-      subject { JournalManager.changed? journable }
 
       it { is_expected.to be_falsey }
     end
@@ -68,16 +64,12 @@ describe JournalManager, type: :model do
       let(:old) { '' }
       let(:changed) { 'Changed text' }
 
-      subject { JournalManager.changed? journable }
-
       it { is_expected.to be_truthy }
     end
 
     context 'when changed value has a value and old value is nil' do
       let(:old) { nil }
       let(:changed) { 'Changed text' }
-
-      subject { JournalManager.changed? journable }
 
       it { is_expected.to be_truthy }
     end
@@ -86,16 +78,12 @@ describe JournalManager, type: :model do
       let(:old) { 'Old text' }
       let(:changed) { nil }
 
-      subject { JournalManager.changed? journable }
-
       it { is_expected.to be_truthy }
     end
 
     context 'when changed value is an empty string and old value was some text' do
       let(:old) { 'Old text' }
       let(:changed) { '' }
-
-      subject { JournalManager.changed? journable }
 
       it { is_expected.to be_truthy }
     end

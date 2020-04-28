@@ -139,7 +139,9 @@ class JournalManager
         attachable_changes.journable_id = data_changes.journable_id
     SQL
 
-    ActiveRecord::Base.connection.select_one(sql)['count'].positive?
+    ActiveRecord::Base.uncached do
+      ActiveRecord::Base.connection.select_one(sql)['count'].positive?
+    end
   end
 
   # TODO: turn private
@@ -196,10 +198,23 @@ class JournalManager
     journable_table_name = journable.class.table_name
     data_table_name = journal_class(journable.class).table_name
 
+    text_columns = text_column_names(journable)
+
     # TODO:
     #  * normalize strings
-    data_columns = journable.journaled_columns_names.map do |column_name|
-      "(#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})"
+    data_columns = (journable.journaled_columns_names - text_columns).map do |column_name|
+      <<~SQL
+        (#{journable_table_name}.#{column_name} != #{data_table_name}.#{column_name})
+        OR (#{journable_table_name}.#{column_name} IS NULL AND #{data_table_name}.#{column_name} IS NOT NULL)
+        OR (#{journable_table_name}.#{column_name} IS NOT NULL AND #{data_table_name}.#{column_name} IS NULL)
+      SQL
+    end
+
+    data_columns += text_columns.map do |column_name|
+      <<~SQL
+        (REGEXP_REPLACE(COALESCE(#{journable_table_name}.#{column_name}, ''), '\\r\\n', '\n', 'g') !=
+         REGEXP_REPLACE(COALESCE(#{data_table_name}.#{column_name}, ''), '\\r\\n', '\n', 'g'))
+      SQL
     end
 
     additional_source_sql = journable.class.vestal_journals_options[:data_sql]&.call(journable) || ''
@@ -274,15 +289,10 @@ class JournalManager
     journal = Journal.instantiate(result)
 
     if journal
-      # TODO:
-      # * fix parent_id
-      # * generalize for non wp
-      journaled_column_names = journable.journaled_columns_names
-      text_column_names = journable.class.columns_hash.select { |_, v| v.type == :text }.keys.map(&:to_sym) & journaled_column_names
-
       # ensure the text_columns of the sink are sorted the same as the one of the source
-      sink_selects = journaled_column_names - text_column_names + text_column_names
-      source_selects = journaled_column_names - text_column_names + text_column_names.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
+      text_columns = text_column_names(journable)
+      sink_selects = journable.journaled_columns_names - text_columns + text_columns
+      source_selects = journable.journaled_columns_names - text_columns + text_columns.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
 
       additional_source_sql = journable.class.vestal_journals_options[:data_sql]&.call(journable) || ''
 
@@ -408,5 +418,9 @@ class JournalManager
     data.each_with_object({}) do |e, h|
       h[e[0]] = (e[1].is_a?(String) ? e[1].gsub(/\r\n/, "\n") : e[1])
     end
+  end
+
+  def self.text_column_names(journable)
+    journable.class.columns_hash.select { |_, v| v.type == :text }.keys.map(&:to_sym) & journable.journaled_columns_names
   end
 end
