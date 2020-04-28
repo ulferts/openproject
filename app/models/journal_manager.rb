@@ -160,7 +160,7 @@ class JournalManager
          FROM attachments
          WHERE attachments.container_id = #{journable.id} AND attachments.container_type = '#{journable.class.name}') attachments
       ON
-        attachments.container_id = max_journals.journable_id
+        attachments.id = attachable_journals.attachment_id
       WHERE
         (attachments.id IS NULL AND attachable_journals.attachment_id IS NOT NULL)
         OR (attachable_journals.attachment_id IS NULL AND attachments.id IS NOT NULL)
@@ -185,7 +185,7 @@ class JournalManager
          FROM custom_values
          WHERE custom_values.customized_id = #{journable.id} AND custom_values.customized_type = '#{journable.class.name}') custom_values
       ON
-        custom_values.customized_id = max_journals.journable_id
+        custom_values.custom_field_id = customizable_journals.custom_field_id
       WHERE
         (custom_values.value IS NULL AND customizable_journals.value IS NOT NULL)
         OR (customizable_journals.value IS NULL AND custom_values.value IS NOT NULL AND custom_values.value != '')
