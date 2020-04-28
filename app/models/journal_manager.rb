@@ -121,8 +121,8 @@ class JournalManager
            journals
          WHERE
            journals.journable_id = #{journable.id}
-           AND journals.journable_type = '#{journable.class.base_class}'
-           AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = #{journable.id} AND journable_type = '#{journable.class.base_class}')
+           AND journals.journable_type = '#{base_class_name(journable.class)}'
+           AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = #{journable.id} AND journable_type = '#{base_class_name(journable.class)}')
       )
 
       SELECT
@@ -238,15 +238,10 @@ class JournalManager
   def self.add_journal!(journable, user = User.current, notes = '')
     return unless journalized?(journable)
 
-    # Ensure a version exists for this journable type
-    # since no version is changed here, in case of concurrency, one
-    # of the calls is allowed to fail
+    # TODO: remove journal version table
     journable_type = base_class_name(journable.class)
-    ::JournalVersion.find_or_create_by(journable_type: journable_type, journable_id: journable.id)
 
-    version = increment_version!(journable_type, journable.id)
-
-    Rails.logger.debug "Inserting new journal for #{journable_type} ##{journable.id} @ #{version}"
+    Rails.logger.debug "Inserting new journal for #{journable_type} ##{journable.id}"
 
     # FIXME: this is required for the association to be correctly saved...
     journal_sql = <<~SQL
@@ -260,15 +255,16 @@ class JournalManager
           notes,
           created_at
         )
-      VALUES (
+      SELECT
         :journable_id,
         :journable_type,
-        :version,
+        COALESCE(MAX(version), 0) + 1,
         :activity_type,
         :user_id,
         :notes,
         now()
-      )
+      FROM journals
+      WHERE journable_id = :journable_id AND journable_type = :journable_type
       RETURNING *
     SQL
 
@@ -276,9 +272,8 @@ class JournalManager
                                                         notes: notes,
                                                         journable_id: journable.id,
                                                         activity_type: journable.activity_type,
-                                                        journable_type: journable.class.base_class,
-                                                        user_id: user.id,
-                                                        version: version)
+                                                        journable_type: base_class_name(journable.class),
+                                                        user_id: user.id)
 
     result = ::JournalVersion
              .connection
@@ -363,22 +358,6 @@ class JournalManager
     # TODO: find new solution for touching the journable
     journal.send(:touch_journable)
     journal
-  end
-
-  # TODO remove external version table as we now have mutexes
-  def self.increment_version!(journable_type, journable_id)
-    sql = <<~SQL
-      UPDATE #{JournalVersion.table_name}
-      SET version = version + 1
-      WHERE journable_type = :journable_type AND :journable_id = journable_id
-      RETURNING version
-    SQL
-
-    sanitized = ::OpenProject::SqlSanitization.sanitize(sql, journable_type: journable_type, journable_id: journable_id)
-    ::JournalVersion
-      .connection
-      .execute(sanitized)
-      .first['version']
   end
 
   def self.update_user_references(current_user_id, substitute_id)
