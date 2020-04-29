@@ -87,9 +87,6 @@ module Redmine
           include Permissions
           include SaveHooks
           include FormatHooks
-
-          # FIXME: When the transition to the new API is complete, remove me
-          include Deprecated
         end
       end
     end
