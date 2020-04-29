@@ -56,16 +56,9 @@ module Redmine::Acts::Journalized
 
       base.class_eval do
         after_save :save_journals
-        after_destroy :remove_journal_version
 
         attr_accessor :journal_notes, :journal_user
       end
-    end
-
-    def remove_journal_version
-      ::JournalVersion
-        .where(journable_type: self.class.name, journable_id: id)
-        .delete_all
     end
 
     def save_journals
