@@ -694,8 +694,8 @@ class WorkPackage < ApplicationRecord
   def override_last_journal_notes_and_user_of!(other_work_package)
     journal = other_work_package.journals.last
     # Same user and notes
-    journal.user = current_journal.user
-    journal.notes = current_journal.notes
+    journal.user = last_journal.user
+    journal.notes = last_journal.notes
 
     journal.save
   end
