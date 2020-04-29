@@ -63,7 +63,7 @@ module Redmine::Acts::Journalized
 
     def save_journals
       with_ensured_journal_attributes do
-        add_journal = journals.empty? || JournalManager.changed?(self) || !@journal_notes.empty?
+        add_journal = !@journal_notes.empty? || JournalManager.changed?(self)
 
         if add_journal
           journal = JournalManager.add_journal!(self, @journal_user, @journal_notes)

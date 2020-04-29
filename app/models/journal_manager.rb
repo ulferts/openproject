@@ -310,12 +310,12 @@ class JournalManager
           #{data_table_name}
         ON
           #{data_table_name}.journal_id = max_journals.id
-        JOIN
+        RIGHT JOIN
           (SELECT * FROM #{journable_table_name} #{additional_source_sql}) #{journable_table_name}
         ON
           #{journable_table_name}.id = max_journals.journable_id
         WHERE
-          #{data_columns.join(' OR ')}
+          #{journable_table_name}.id = #{journable.id} AND (#{data_columns.join(' OR ')})
       SQL
     end
 
