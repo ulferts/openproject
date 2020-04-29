@@ -29,16 +29,6 @@
 
 class JournalManager
   class << self
-    def changes_on_association(current, predecessor, association, key, value)
-      merged_journals = merge_reference_journals_by_id(current, predecessor, key.to_s, value.to_s)
-
-      changes = added_references(merged_journals)
-        .merge(removed_references(merged_journals))
-        .merge(changed_references(merged_journals))
-
-      to_changes_format(changes, association.to_s)
-    end
-
     def journalized?(obj)
       obj.present? && obj.respond_to?(:journals)
     end
@@ -183,49 +173,6 @@ class JournalManager
 
     private
 
-    def merge_reference_journals_by_id(new_journals, old_journals, id_key, value)
-      all_associated_journal_ids = new_journals.map { |j| j[id_key] } | old_journals.map { |j| j[id_key] }
-
-      all_associated_journal_ids.each_with_object({}) do |id, result|
-        result[id] = [select_and_combine(old_journals, id, id_key, value),
-                      select_and_combine(new_journals, id, id_key, value)]
-      end
-    end
-
-    def added_references(merged_references)
-      merged_references
-        .select { |_, (old_value, new_value)| old_value.nil? && new_value.present? }
-    end
-
-    def removed_references(merged_references)
-      merged_references
-        .select { |_, (old_value, new_value)| old_value.present? && new_value.nil? }
-    end
-
-    def changed_references(merged_references)
-      merged_references
-        .select { |_, (old_value, new_value)| old_value.present? && new_value.present? && old_value.strip != new_value.strip }
-    end
-
-    def to_changes_format(references, key)
-      references.each_with_object({}) do |(id, (old_value, new_value)), result|
-        result["#{key}_#{id}"] = [old_value, new_value]
-      end
-    end
-
-    def journable_details(journable)
-      calculated_proc = journable.class.vestal_journals_options[:calculate]
-
-      attributes = journable.attributes.symbolize_keys
-
-      if calculated_proc
-        attributes
-          .merge!(journable.instance_exec(&calculated_proc))
-      end
-
-      attributes
-    end
-
     def journal_class_name(type)
       "#{base_class_name(type)}Journal"
     end
@@ -236,16 +183,6 @@ class JournalManager
 
     def base_class_name(type)
       base_class(type).name
-    end
-
-    def select_and_combine(journals, id, key, value)
-      selected_journals = journals.select { |j| j[key] == id }.map { |j| j[value] }
-
-      if selected_journals.empty?
-        nil
-      else
-        selected_journals.join(',')
-      end
     end
 
     def create_journal(journable, user, notes)

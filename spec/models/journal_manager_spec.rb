@@ -134,18 +134,4 @@ describe JournalManager, type: :model do
       expect(some_other_journal.reload.user.is_a?(DeletedUser)).to be_falsey
     end
   end
-
-  describe '.changes_on_association' do
-    context 'with one of the values having a newline' do
-      let(:current) { { id: 2, value: 'some value', custom_field_id: 123 }.with_indifferent_access }
-      let(:predecessor) { { id: 1, value: "some value\n", custom_field_id: 123 }.with_indifferent_access }
-
-      it 'does not identify a change' do
-        changes = JournalManager.changes_on_association([current], [predecessor], 'custom_fields', :custom_field_id, :value)
-
-        expect(changes)
-          .to be_empty
-      end
-    end
-  end
 end
