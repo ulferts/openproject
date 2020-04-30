@@ -83,17 +83,6 @@ describe WorkPackage, type: :model do
       it { expect(Journal.all.count).to eq(1) }
     end
 
-    context 'when the journal manager does not detect a change to be tracked' do
-      before do
-        allow(JournalManager).to receive(:changed?).with(work_package).and_return false
-        work_package.assign_attributes subject: "#{work_package.subject} with changes"
-      end
-
-      it 'is not created' do
-        expect { work_package.save! }.not_to(change { work_package.journals.reload.length })
-      end
-    end
-
     context 'different newlines' do
       let(:description) { "Description\n\nwith newlines\n\nembedded" }
       let(:changed_description) { description.gsub("\n", "\r\n") }
@@ -389,8 +378,6 @@ describe WorkPackage, type: :model do
           include_context 'work package with custom value'
 
           it { expect(work_package.journals.reload.last.customizable_journals).to be_empty }
-
-          it { expect(JournalManager.changed?(work_package)).to be_falsey }
         end
 
         describe 'empty values handled as non existing' do

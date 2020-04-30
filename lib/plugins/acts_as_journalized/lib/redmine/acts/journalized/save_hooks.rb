@@ -52,8 +52,6 @@
 module Redmine::Acts::Journalized
   module SaveHooks
     def self.included(base)
-      base.extend ClassMethods
-
       base.class_eval do
         after_save :save_journals
 
@@ -63,9 +61,9 @@ module Redmine::Acts::Journalized
 
     def save_journals
       with_ensured_journal_attributes do
-        if !@journal_notes.empty? || JournalManager.changed?(self)
-          journal = JournalManager.add_journal!(self, @journal_user, @journal_notes)
+        journal = JournalManager.add_journal!(self, @journal_user, @journal_notes)
 
+        if journal
           OpenProject::Notifications.send('journal_created',
                                           journal: journal,
                                           send_notification: Journal::NotificationConfiguration.active?)
@@ -76,23 +74,20 @@ module Redmine::Acts::Journalized
     end
 
     def add_journal(user = User.current, notes = '')
-      @journal_user ||= user
-      @journal_notes ||= notes
+      self.journal_user ||= user
+      self.journal_notes ||= notes
     end
 
     private
 
     def with_ensured_journal_attributes
-      @journal_user ||= User.current
-      @journal_notes ||= ''
+      self.journal_user ||= User.current
+      self.journal_notes ||= ''
 
       yield
     ensure
-      @journal_user = nil
-      @journal_notes = nil
-    end
-
-    module ClassMethods
+      self.journal_user = nil
+      self.journal_notes = nil
     end
   end
 end
