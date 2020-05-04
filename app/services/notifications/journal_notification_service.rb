@@ -34,32 +34,11 @@ class Notifications::JournalNotificationService
 
     def call(journal, send_mails)
       if journal.journable_type == 'WorkPackage'
-        handle_work_package_journal(journal, send_mails)
+        enqueue_work_package_notification(journal, send_mails)
       end
     end
 
     private
-
-    def handle_work_package_journal(journal, send_mails)
-      notify_for_wp_predecessor(journal, send_mails)
-      enqueue_work_package_notification(journal, send_mails)
-    end
-
-    # Send the notification on behalf of the predecessor in case it could not send it on its own
-    def notify_for_wp_predecessor(journal, send_mails)
-      aggregated = Journal.uncached { find_aggregated_journal_for(journal) }
-
-      # TODO: Check whether this edge case still applies as I believe that the journals are now aggregated
-      # differently:
-      #  Journal 1: comment
-      #  Journal 2: change (this can also be multiple journals)
-      #  Journal 3: comment
-      # After adding Journal 3, the aggregation will look like (1, 2), (3).
-      if Journal::AggregatedJournal.hides_notifications?(aggregated, aggregated.predecessor)
-        aggregated_predecessor = find_aggregated_journal_for(aggregated.predecessor)
-        notify_journal_complete(aggregated_predecessor, send_mails)
-      end
-    end
 
     def enqueue_work_package_notification(journal, send_mails)
       EnqueueWorkPackageNotificationJob
