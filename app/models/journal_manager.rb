@@ -51,76 +51,6 @@ class JournalManager
 
       return unless journal
 
-      # ensure the text_columns of the sink are sorted the same as the one of the source
-      text_columns = text_column_names(journable)
-      sink_selects = journable.journaled_columns_names - text_columns + text_columns
-      source_selects = journable.journaled_columns_names - text_columns + text_columns.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
-
-      additional_source_sql = journable.class.vestal_journals_options[:data_sql]&.call(journable) || ''
-
-      data_sql = <<~SQL
-        INSERT INTO
-          #{journal_class(journable.class).table_name} (
-            journal_id,
-            #{sink_selects.join(', ')}
-          )
-        SELECT
-          #{journal.id},
-          #{source_selects.join(', ')}
-        FROM #{journable.class.table_name}
-        #{additional_source_sql}
-        WHERE #{journable.class.table_name}.id = #{journable.id}
-      SQL
-
-      journal_class(journable.class)
-        .connection
-        .execute(data_sql)
-
-      attachment_sql = <<~SQL
-        INSERT INTO
-          attachable_journals (
-            journal_id,
-            attachment_id,
-            filename
-          )
-        SELECT
-          #{journal.id},
-          id,
-          file
-        FROM attachments
-        WHERE
-          attachments.container_id = #{journable.id}
-          AND attachments.container_type = '#{journable.class.name}'
-      SQL
-
-      Journal::AttachableJournal
-        .connection
-        .execute(attachment_sql)
-
-      # TODO: write migration to split up the existing migrations for multi select lists
-      custom_value_sql = <<~SQL
-        INSERT INTO
-          customizable_journals (
-            journal_id,
-            custom_field_id,
-            value
-          )
-        SELECT
-          #{journal.id},
-          custom_field_id,
-          value
-        FROM custom_values
-        WHERE
-          custom_values.customized_id = #{journable.id}
-          AND custom_values.customized_type = '#{journable.class.name}'
-          AND custom_values.value IS NOT NULL
-          AND custom_values.value != ''
-      SQL
-
-      Journal::CustomizableJournal
-        .connection
-        .execute(custom_value_sql)
-
       journable.journals.reload if journable.journals.loaded?
       # TODO: find new solution for touching the journable
       journal.send(:touch_journable)
@@ -154,53 +84,34 @@ class JournalManager
       Journal.instantiate(result) if result
     end
 
-    def max_journal_sql(journable)
+    def create_journal_sql(journable, user, notes)
       <<~SQL
         WITH max_journals AS (
-          SELECT
-            #{journable.id} journable_id,
-            '#{base_class_name(journable.class)}' journable_type,
-            COALESCE(journals.version, fallback.version) AS version,
-            COALESCE(journals.id, 0) id
-          FROM
-            journals
-          RIGHT OUTER JOIN
-            (SELECT 0 AS version) fallback
-          ON
-             journals.journable_id = #{journable.id}
-             AND journals.journable_type = '#{base_class_name(journable.class)}'
-             AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = #{journable.id} AND journable_type = '#{base_class_name(journable.class)}')
+          #{select_max_journal_sql(journable)}
+        ), changes AS (
+          #{select_changed_sql(journable)}
+        ), inserted_journal AS (
+          #{insert_journal_sql(journable, notes, user)}
+        ), insert_data AS (
+          #{insert_data_sql(journable)}
+        ), insert_attachable AS (
+          #{insert_attachable_sql(journable)}
+        ), insert_customizable AS (
+          #{insert_customizable_sql(journable)}
         )
+
+        SELECT * from inserted_journal
       SQL
     end
 
-    def changed_select_sql(journable)
-      <<~SQL
-        SELECT
-           *
-        FROM
-          (#{data_changes_sql(journable)}) data_changes
-        FULL JOIN
-          (#{customizable_changes_sql(journable)}) customizable_changes
-        ON
-          customizable_changes.journable_id = data_changes.journable_id
-        FULL JOIN
-          (#{attachable_changes_sql(journable)}) attachable_changes
-        ON
-          attachable_changes.journable_id = data_changes.journable_id
-      SQL
-    end
-
-    def create_journal_sql(journable, user, notes)
+    def insert_journal_sql(journable, notes, user)
       condition = if notes.blank?
-                    "WHERE EXISTS (#{changed_select_sql(journable)})"
+                    "WHERE EXISTS (SELECT * FROM changes)"
                   else
                     ""
                   end
 
       journal_sql = <<~SQL
-        #{max_journal_sql(journable)}
-
         INSERT INTO
           journals (
             journable_id,
@@ -230,6 +141,116 @@ class JournalManager
                                               activity_type: journable.activity_type,
                                               journable_type: base_class_name(journable.class),
                                               user_id: user.id)
+    end
+
+    def insert_data_sql(journable)
+      data_sql = <<~SQL
+        INSERT INTO
+          #{journal_class(journable.class).table_name} (
+            journal_id,
+            #{data_sink_columns(journable)}
+          )
+        SELECT
+          #{id_from_inserted_journal_sql},
+          #{data_source_columns(journable)}
+        FROM #{journable.class.table_name}
+        #{journable_data_sql_addition(journable)}
+        WHERE
+          #{only_if_created_sql}
+          AND #{journable.class.table_name}.id = :journable_id
+      SQL
+
+      ::OpenProject::SqlSanitization.sanitize(data_sql,
+                                              journable_id: journable.id)
+    end
+
+    def insert_attachable_sql(journable)
+      attachable_sql = <<~SQL
+        INSERT INTO
+          attachable_journals (
+            journal_id,
+            attachment_id,
+            filename
+          )
+        SELECT
+          #{id_from_inserted_journal_sql},
+          attachments.id,
+          attachments.file
+        FROM attachments
+        WHERE
+          #{only_if_created_sql}
+          AND attachments.container_id = :journable_id
+          AND attachments.container_type = :journable_class_name
+      SQL
+
+      ::OpenProject::SqlSanitization.sanitize(attachable_sql,
+                                              journable_id: journable.id,
+                                              journable_class_name: journable.class.name)
+    end
+
+    def insert_customizable_sql(journable)
+      customizable_sql = <<~SQL
+        INSERT INTO
+          customizable_journals (
+            journal_id,
+            custom_field_id,
+            value
+          )
+        SELECT
+          #{id_from_inserted_journal_sql},
+          custom_values.custom_field_id,
+          custom_values.value
+        FROM custom_values
+        WHERE
+          #{only_if_created_sql}
+          AND custom_values.customized_id = :journable_id
+          AND custom_values.customized_type = :journable_class_name
+          AND custom_values.value IS NOT NULL
+          AND custom_values.value != ''
+      SQL
+
+      ::OpenProject::SqlSanitization.sanitize(customizable_sql,
+                                              journable_id: journable.id,
+                                              journable_class_name: journable.class.name)
+    end
+
+    def select_max_journal_sql(journable)
+      max_journal_sql = <<~SQL
+        SELECT
+          :journable_id journable_id,
+          :journable_type journable_type,
+          COALESCE(journals.version, fallback.version) AS version,
+          COALESCE(journals.id, 0) id
+        FROM
+          journals
+        RIGHT OUTER JOIN
+          (SELECT 0 AS version) fallback
+        ON
+           journals.journable_id = :journable_id
+           AND journals.journable_type = :journable_type
+           AND journals.version IN (SELECT MAX(version) FROM journals WHERE journable_id = :journable_id AND journable_type = :journable_type)
+      SQL
+
+      ::OpenProject::SqlSanitization.sanitize(max_journal_sql,
+                                              journable_id: journable.id,
+                                              journable_type: base_class_name(journable.class))
+    end
+
+    def select_changed_sql(journable)
+      <<~SQL
+        SELECT
+           *
+        FROM
+          (#{data_changes_sql(journable)}) data_changes
+        FULL JOIN
+          (#{customizable_changes_sql(journable)}) customizable_changes
+        ON
+          customizable_changes.journable_id = data_changes.journable_id
+        FULL JOIN
+          (#{attachable_changes_sql(journable)}) attachable_changes
+        ON
+          attachable_changes.journable_id = data_changes.journable_id
+      SQL
     end
 
     def attachable_changes_sql(journable)
@@ -300,8 +321,6 @@ class JournalManager
         SQL
       end
 
-      additional_source_sql = journable.class.vestal_journals_options[:data_sql]&.call(journable) || ''
-
       # TODO: consider switching subqueries to avoid RIGHT JOIN in favor of LEFT JOIN
       <<~SQL
         SELECT
@@ -313,12 +332,35 @@ class JournalManager
            ON
              #{data_table_name}.journal_id = max_journals.id) #{data_table_name}
         RIGHT JOIN
-          (SELECT * FROM #{journable_table_name} #{additional_source_sql}) #{journable_table_name}
+          (SELECT * FROM #{journable_table_name} #{journable_data_sql_addition(journable)}) #{journable_table_name}
         ON
           #{journable_table_name}.id = #{data_table_name}.journable_id
         WHERE
           #{journable_table_name}.id = #{journable.id} AND (#{data_columns.join(' OR ')})
       SQL
+    end
+
+    def only_if_created_sql
+      "EXISTS (SELECT * from inserted_journal)"
+    end
+
+    def id_from_inserted_journal_sql
+      "(SELECT id FROM inserted_journal)"
+    end
+
+    def data_sink_columns(journable)
+      text_columns = text_column_names(journable)
+      (journable.journaled_columns_names - text_columns + text_columns).join(', ')
+    end
+
+    def data_source_columns(journable)
+      text_columns = text_column_names(journable)
+      normalized_text_columns = text_columns.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
+      (journable.journaled_columns_names - text_columns + normalized_text_columns).join(', ')
+    end
+
+    def journable_data_sql_addition(journable)
+      journable.class.vestal_journals_options[:data_sql]&.call(journable) || ''
     end
 
     def text_column_names(journable)
