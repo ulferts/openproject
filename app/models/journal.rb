@@ -47,9 +47,6 @@ class Journal < ApplicationRecord
   has_many :attachable_journals, class_name: 'Journal::AttachableJournal', dependent: :destroy
   has_many :customizable_journals, class_name: 'Journal::CustomizableJournal', dependent: :destroy
 
-  after_create :save_data, if: :data
-  after_save :save_data, :touch_journable
-
   # Scopes to all journals excluding the initial journal - useful for change
   # logs like the history on issue#show
   scope :changing, -> { where(['version > 1']) }
@@ -112,10 +109,6 @@ class Journal < ApplicationRecord
     @data ||= "Journal::#{journable_type}Journal".constantize.find_by(journal_id: id)
   end
 
-  def data=(data)
-    @data = data
-  end
-
   def previous
     predecessor
   end
@@ -125,23 +118,6 @@ class Journal < ApplicationRecord
   end
 
   private
-
-  def save_data
-    data.journal_id = id if data.new_record?
-    data.save!
-  end
-
-  def touch_journable
-    if journable && !journable.changed?
-      # Not using touch here on purpose,
-      # as to avoid changing lock versions on the journables for this change
-      time = journable.send(:current_time_from_proper_timezone)
-      attributes = journable.send(:timestamp_attributes_for_update_in_model)
-
-      timestamps = Hash[attributes.map { |column| [column, time] }]
-      journable.update_columns(timestamps) if timestamps.any?
-    end
-  end
 
   def predecessor
     @predecessor ||= self.class

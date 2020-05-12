@@ -47,7 +47,7 @@ describe WorkPackage, type: :model do
     let(:current_user) { FactoryBot.create(:user) }
 
     before do
-      allow(User).to receive(:current).and_return current_user
+      login_as(current_user)
 
       work_package
     end
@@ -72,6 +72,14 @@ describe WorkPackage, type: :model do
       it 'notes the description to project' do
         expect(Journal.first.details[:description])
           .to match_array [nil, work_package.description]
+      end
+
+      it 'has the timestamp of the work package update time for created_at' do
+        # This seemingly unnecessary reload leads to the updated_at having the same
+        # precision as the created_at of the Journal. It is database dependent, so it would work without
+        # reload on PG 12 but does not work on PG 9.
+        expect(Journal.first.created_at)
+          .to eql(work_package.reload.updated_at)
       end
     end
 
@@ -230,6 +238,14 @@ describe WorkPackage, type: :model do
           expect(last_journal.data.description).to eql('description v4')
         end
       end
+
+      it 'has the timestamp of the work package update time for created_at' do
+        # This seemingly unnecessary reload leads to the updated_at having the same
+        # precision as the created_at of the Journal. It is database dependent, so it would work without
+        # reload on PG 12 but does not work on PG 9.
+        expect(work_package.journals.order(:id).last.created_at)
+          .to eql(work_package.reload.updated_at)
+      end
     end
 
     context 'attachments' do
@@ -385,6 +401,37 @@ describe WorkPackage, type: :model do
 
           it { expect(work_package.journals.reload.last.customizable_journals.count).to eq(0) }
         end
+      end
+    end
+
+    context 'on only journal notes adding' do
+      before do
+        work_package.add_journal(User.current, 'some notes')
+        work_package.save
+      end
+
+      it 'has the timestamp of the work package update time for created_at' do
+        # This seemingly unnecessary reload leads to the updated_at having the same
+        # precision as the created_at of the Journal. It is database dependent, so it would work without
+        # reload on PG 12 but does not work on PG 9.
+        expect(work_package.journals.last.created_at)
+          .to eql(work_package.reload.updated_at)
+      end
+    end
+
+    context 'on mixed journal notes and attribute adding' do
+      before do
+        work_package.add_journal(User.current, 'some notes')
+        work_package.subject = 'blubs'
+        work_package.save
+      end
+
+      it 'has the timestamp of the work package update time for created_at' do
+        # This seemingly unnecessary reload leads to the updated_at having the same
+        # precision as the created_at of the Journal. It is database dependent, so it would work without
+        # reload on PG 12 but does not work on PG 9.
+        expect(work_package.journals.last.created_at)
+          .to eql(work_package.reload.updated_at)
       end
     end
   end

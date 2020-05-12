@@ -31,20 +31,6 @@ require 'spec_helper'
 
 describe Journal,
          type: :model do
-  describe '#create' do
-    it 'updates updated_on of the journable record (touch)' do
-      user = FactoryBot.create(:user)
-      timestamp = 5.minutes.ago
-      journaled = FactoryBot.create(:work_package)
-      journaled.update_columns(created_at: timestamp, updated_at: timestamp)
-
-      Journal.create user: user, notes: 'A note', journable: journaled, data: Journal::WorkPackageJournal.new
-
-      expect(journaled.updated_at)
-        .not_to eql timestamp
-    end
-  end
-
   describe '#journable' do
     it 'raises no error on a new journal without a journable' do
       expect(Journal.new.journable)

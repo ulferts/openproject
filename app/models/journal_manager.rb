@@ -52,8 +52,7 @@ class JournalManager
       return unless journal
 
       journable.journals.reload if journable.journals.loaded?
-      # TODO: find new solution for touching the journable
-      journal.send(:touch_journable)
+      touch_journable(journal, journable)
       journal
     end
 
@@ -77,9 +76,11 @@ class JournalManager
 
       create_sql = create_journal_sql(journable, user, notes)
 
-      result = ::Journal
-                 .connection
-                 .select_one(create_sql)
+      result = Journal.connection.uncached do
+        ::Journal
+           .connection
+           .select_one(create_sql)
+      end
 
       Journal.instantiate(result) if result
     end
@@ -111,6 +112,12 @@ class JournalManager
                     ""
                   end
 
+      timestamp = if notes.blank? && journable_timestamp(journable)
+                    ':created_at'
+                  else
+                    'now()'
+                  end
+
       journal_sql = <<~SQL
         INSERT INTO
           journals (
@@ -129,7 +136,7 @@ class JournalManager
           :activity_type,
           :user_id,
           :notes,
-          now()
+          #{timestamp}
         FROM max_journals
         #{condition}
         RETURNING *
@@ -140,7 +147,8 @@ class JournalManager
                                               journable_id: journable.id,
                                               activity_type: journable.activity_type,
                                               journable_type: base_class_name(journable.class),
-                                              user_id: user.id)
+                                              user_id: user.id,
+                                              created_at: journable_timestamp(journable))
     end
 
     def insert_data_sql(journable)
@@ -365,6 +373,21 @@ class JournalManager
 
     def text_column_names(journable)
       journable.class.columns_hash.select { |_, v| v.type == :text }.keys.map(&:to_sym) & journable.journaled_columns_names
+    end
+
+    def touch_journable(journal, journable)
+      return unless journal.notes.present?
+
+      # Not using touch here on purpose,
+      # as to avoid changing lock versions on the journables for this change
+      attributes = journable.send(:timestamp_attributes_for_update_in_model)
+
+      timestamps = attributes.index_with { journal.created_at }
+      journable.update_columns(timestamps) if timestamps.any?
+    end
+
+    def journable_timestamp(journable)
+      journable.respond_to?(:updated_at) && journable.updated_at || journable.respond_to?(:updated_on) && journable.updated_on
     end
   end
 end
