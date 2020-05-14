@@ -77,13 +77,13 @@ describe User, '#destroy', type: :model do
     it { expect(associated_instance.journals.first.user).to eq(user2) }
     it 'should update first journal changes' do
       associations.each do |association|
-        expect(associated_instance.journals.first.changed_data[(association.to_s + '_id').to_sym].last).to eq(user2.id)
+        expect(associated_instance.journals.first.details[(association.to_s + '_id').to_sym].last).to eq(user2.id)
       end
     end
     it { expect(associated_instance.journals.last.user).to eq(substitute_user) }
     it 'should update second journal changes' do
       associations.each do |association|
-        expect(associated_instance.journals.last.changed_data[(association.to_s + '_id').to_sym].last).to eq(substitute_user.id)
+        expect(associated_instance.journals.last.details[(association.to_s + '_id').to_sym].last).to eq(substitute_user.id)
       end
     end
   end
@@ -116,14 +116,14 @@ describe User, '#destroy', type: :model do
     it { expect(associated_instance.journals.first.user).to eq(substitute_user) }
     it 'should update the first journal' do
       associations.each do |association|
-        expect(associated_instance.journals.first.changed_data[(association.to_s + '_id').to_sym].last).to eq(substitute_user.id)
+        expect(associated_instance.journals.first.details[(association.to_s + '_id').to_sym].last).to eq(substitute_user.id)
       end
     end
     it { expect(associated_instance.journals.last.user).to eq(user2) }
     it 'should update the last journal' do
       associations.each do |association|
-        expect(associated_instance.journals.last.changed_data[(association.to_s + '_id').to_sym].first).to eq(substitute_user.id)
-        expect(associated_instance.journals.last.changed_data[(association.to_s + '_id').to_sym].last).to eq(user2.id)
+        expect(associated_instance.journals.last.details[(association.to_s + '_id').to_sym].first).to eq(substitute_user.id)
+        expect(associated_instance.journals.last.details[(association.to_s + '_id').to_sym].last).to eq(user2.id)
       end
     end
   end

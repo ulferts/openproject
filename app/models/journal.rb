@@ -54,15 +54,6 @@ class Journal < ApplicationRecord
   # logs like the history on issue#show
   scope :changing, -> { where(['version > 1']) }
 
-  def changed_data=(changed_attributes)
-    attributes = changed_attributes
-
-    if attributes.is_a? Hash and attributes.values.first.is_a? Array
-      attributes.each { |k, v| attributes[k] = v[1] }
-    end
-    data.update attributes
-  end
-
   # TODO: check if this can be removed
   # Overrides the +user=+ method created by the polymorphic +belongs_to+ user association.
   # Based on the class of the object given, either the +user+ association columns or the
@@ -108,9 +99,6 @@ class Journal < ApplicationRecord
   def details
     get_changes
   end
-
-  # TODO Evaluate whether this can be removed without disturbing any migrations
-  alias_method :changed_data, :details
 
   def new_value_for(prop)
     details[prop].last if details.keys.include? prop
