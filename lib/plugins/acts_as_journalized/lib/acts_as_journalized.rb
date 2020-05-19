@@ -49,45 +49,47 @@
 
 require 'journal_changes'
 require 'journal_formatter'
-Dir[File.expand_path('../redmine/acts/journalized/*.rb', __FILE__)].each { |f| require f }
+
+module Acts
+end
+
 Dir[File.expand_path('../acts/journalized/*.rb', __FILE__)].each { |f| require f }
 
-module Redmine
-  module Acts
-    module Journalized
-      def self.included(base)
-        base.extend ClassMethods
-        base.extend Journalized
+module Acts
+  module Journalized
+    def self.included(base)
+      base.extend ClassMethods
+      base.extend Journalized
+    end
+
+    module ClassMethods
+      def plural_name
+        name.underscore.pluralize
       end
 
-      module ClassMethods
-        def plural_name
-          name.underscore.pluralize
-        end
+      # This call will start journaling the model.
+      def acts_as_journalized(options = {})
+        return if journaled?
 
-        # This call will start journaling the model.
-        def acts_as_journalized(options = {})
-          return if journaled?
+        include_aaj_modules
 
-          include_aaj_modules
+        journal_hash = prepare_journaled_options(options)
 
-          journal_hash = prepare_journaled_options(options)
+        has_many :journals, -> {
+          order("#{Journal.table_name}.version ASC")
+        }, journal_hash
+      end
 
-          has_many :journals, -> {
-            order("#{Journal.table_name}.version ASC")
-          }, journal_hash
-        end
+      private
 
-        private
-
-        def include_aaj_modules
-          include Options
-          include Creation
-          include Reversion
-          include Permissions
-          include SaveHooks
-          include FormatHooks
-        end
+      def include_aaj_modules
+        include Options
+        include Creation
+        include Reversion
+        include Permissions
+        include SaveHooks
+        include FormatHooks
+        include DataClass
       end
     end
   end

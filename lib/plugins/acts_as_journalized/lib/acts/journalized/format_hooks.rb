@@ -46,7 +46,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-module Redmine::Acts::Journalized
+module Acts::Journalized
   module FormatHooks
     def self.included(base)
       base.extend ClassMethods
@@ -56,7 +56,7 @@ module Redmine::Acts::Journalized
       # Shortcut to register a formatter for a number of fields
       def register_on_journal_formatter(formatter, *field_names)
         formatter = formatter.to_sym
-        journal_class = JournalManager.journal_class self
+        journal_class = self.journal_class
         field_names.each do |field|
           JournalFormatter.register_formatted_field(journal_class.name.to_sym, field, formatter)
         end

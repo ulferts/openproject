@@ -379,7 +379,7 @@ class WorkPackage < ApplicationRecord
   end
 
   # check if user is allowed to edit WorkPackage Journals.
-  # see Redmine::Acts::Journalized::Permissions#journal_editable_by
+  # see Acts::Journalized::Permissions#journal_editable_by
   def editable_by?(user)
     project = self.project
     user.allowed_to?(:edit_work_package_notes, project, global: project.present?) ||

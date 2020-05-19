@@ -49,7 +49,7 @@
 
 # These hooks make sure journals are properly created and updated with Redmine user detail,
 # notes and associated custom fields
-module Redmine::Acts::Journalized
+module Acts::Journalized
   module SaveHooks
     def self.included(base)
       base.class_eval do
@@ -61,15 +61,17 @@ module Redmine::Acts::Journalized
 
     def save_journals
       with_ensured_journal_attributes do
-        journal = JournalManager.add_journal!(self, @journal_user, @journal_notes)
+        create_call = Journals::CreateService
+                      .new(self, @journal_user)
+                      .call(notes: @journal_notes)
 
-        if journal
+        if create_call.success? && create_call.result
           OpenProject::Notifications.send('journal_created',
-                                          journal: journal,
+                                          journal: create_call.result,
                                           send_notification: Journal::NotificationConfiguration.active?)
-
-          true
         end
+
+        create_call.success?
       end
     end
 

@@ -27,7 +27,6 @@
 #++
 
 #-- encoding: UTF-8
-
 # This file included as part of the acts_as_journalized plugin for
 # the redMine project management software; You can redistribute it
 # and/or modify it under the terms of the GNU General Public License
@@ -65,40 +64,75 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-module Redmine::Acts::Journalized
-  # Enables versioned ActiveRecord::Base instances to revert to a previously saved version.
-  module Reversion
+module Acts::Journalized
+  # Provides +journaled+ options conjournal and cleanup.
+  module Options
     def self.included(base) # :nodoc:
       base.class_eval do
-        include InstanceMethods
+        extend ClassMethods
       end
     end
 
-    # Provides the base instance methods required to revert a journaled instance.
-    module InstanceMethods
-      def last_journal
-        journals.last
-      end
+    # Class methods that provide preparation of options passed to the +journaled+ method.
+    module ClassMethods
+      # The +prepare_journaled_options+ method has three purposes:
+      # 1. Populate the provided options with default values where needed
+      # 2. Prepare options for use with the +has_many+ association
+      # 3. Save user-configurable options in a class-level variable
+      #
+      # Options are given priority in the following order:
+      # 1. Those passed directly to the +journaled+ method
+      # 2. Those specified in an initializer +configure+ block
+      # 3. Default values specified in +prepare_journaled_options+
+      #
+      # The method is overridden in feature modules that require specific options outside the
+      # standard +has_many+ associations.
+      def prepare_journaled_options(options)
+        result_options = options_with_defaults(options)
 
-      # some eager loading may mess up the order
-      # journals.order('created_at').last will not work
-      # (especially when journals already filtered)
-      # thats why this method exists
-      # it is impossible to incorporate this into #last_journal
-      # because some logic is based on this eager loading bug/feature
-      def last_loaded_journal
-        if journals.loaded?
-          journals.sort_by(&:version).last
-        end
+        class_attribute :vestal_journals_options
+        self.vestal_journals_options = result_options.dup
+
+        result_options.merge!(
+          extend: Array(result_options[:extend]).unshift(Versions)
+        )
+
+        result_options
       end
 
       private
 
-      # Returns the number of the last created journal in the object's journal history.
-      #
-      # If no associated journals exist, the object is considered at version 0.
-      def last_version
-        @last_version ||= journals.maximum(:version) || 0
+      def options_with_defaults(options)
+        journal_options = split_option_hashes(options)
+
+        result_options = journal_options.symbolize_keys
+        result_options.reverse_merge!(
+          class_name: Journal.name,
+          dependent: :delete_all,
+          foreign_key: :journable_id,
+          as: :journable
+        )
+
+        result_options
+      end
+
+      # Splits an option has into three hashes:
+      ## => [{ options prefixed with "activity_" }, { options prefixed with "event_" }, { other options }]
+      def split_option_hashes(options)
+        journal_hash = {}
+
+        options.each_pair do |k, v|
+          case k.to_s
+          when /\Aactivity_(.+)\z/
+            raise "Configuring activity via acts_as_journalized is no longer supported."
+          when /\Aevent_(.+)\z/
+            raise "Configuring events via acts_as_journalized is no longer supported."
+          else
+            journal_hash[k.to_sym] = v
+          end
+        end
+
+        journal_hash
       end
     end
   end

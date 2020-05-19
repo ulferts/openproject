@@ -27,6 +27,7 @@
 #++
 
 #-- encoding: UTF-8
+
 # This file included as part of the acts_as_journalized plugin for
 # the redMine project management software; You can redistribute it
 # and/or modify it under the terms of the GNU General Public License
@@ -64,35 +65,54 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-module Redmine::Acts::Journalized
-  # Simply adds a flag to determine whether a model class if journaled.
-  module Journalized
-    def self.extended(base) # :nodoc:
+module Acts::Journalized
+  # Adds the functionality necessary to control journal creation on a journaled instance of
+  # ActiveRecord::Base.
+  module Creation
+    def self.included(base) # :nodoc:
       base.class_eval do
+        include InstanceMethods
+
         class << self
           prepend ClassMethods
         end
       end
     end
 
+    # Class methods added to ActiveRecord::Base to facilitate the creation of new journals.
     module ClassMethods
-      # Overrides the +journaled+ method to first define the +journaled?+ class method before
-      # deferring to the original +journaled+.
-      def acts_as_journalized(*args)
-        super(*args)
+      # Overrides the basal +prepare_journaled_options+ method defined in VestalVersions::Options
+      # to extract the <tt>:calculate</tt> option into +vestal_journals_options+.
+      def prepare_journaled_options(options)
+        result = super(options)
 
-        class << self
-          def journaled?
-            true
-          end
+        assign_vestal = lambda do |key, array|
+          return unless result[key]
+
+          vestal_journals_options[key] = if array
+                                           Array(result.delete(key)).map(&:to_s).uniq
+                                         else
+                                           result.delete(key)
+                                         end
         end
+
+        assign_vestal.call(:data_sql, false)
+
+        result
       end
     end
 
-    # For all ActiveRecord::Base models that do not call the +journaled+ method, the +journaled?+
-    # method will return false.
-    def journaled?
-      false
+    module InstanceMethods
+      # Returns an array of column names that are journaled.
+      def journaled_columns_names
+        self.class.journal_class.journaled_attributes
+      end
+
+      # Returns the activity type. Should be overridden in the journalized class to offer
+      # multiple types
+      def activity_type
+        self.class.name.underscore.pluralize
+      end
     end
   end
 end
