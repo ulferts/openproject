@@ -1,4 +1,5 @@
 # TODO: remove journal version table
+# TODO: Document sql
 module Journals
   class CreateService
     attr_accessor :journable, :user
@@ -26,6 +27,11 @@ module Journals
 
       create_sql = create_journal_sql(notes)
 
+      # We need to ensure that the result is genuine. Otherwise,
+      # calling the service repeatedly for the same journable
+      # could e.g. return a (query cached) journal creation
+      # that then e.g. leads to the later code thinking that a journal was
+      # created.
       result = Journal.connection.uncached do
         ::Journal
           .connection
@@ -157,7 +163,7 @@ module Journals
         SELECT
           #{id_from_inserted_journal_sql},
           custom_values.custom_field_id,
-          custom_values.value
+          #{normalize_newlines_sql('custom_values.value')}
         FROM custom_values
         WHERE
           #{only_if_created_sql}
@@ -212,7 +218,7 @@ module Journals
     end
 
     def attachable_changes_sql
-      <<~SQL
+      attachable_changes_sql = <<~SQL
         SELECT
           max_journals.journable_id
         FROM
@@ -224,19 +230,21 @@ module Journals
         FULL JOIN
           (SELECT *
            FROM attachments
-           WHERE attachments.container_id = #{journable.id} AND attachments.container_type = '#{journable.class.name}') attachments
+           WHERE attachments.container_id = :journable_id AND attachments.container_type = :container_type) attachments
         ON
           attachments.id = attachable_journals.attachment_id
         WHERE
           (attachments.id IS NULL AND attachable_journals.attachment_id IS NOT NULL)
           OR (attachable_journals.attachment_id IS NULL AND attachments.id IS NOT NULL)
       SQL
+
+      ::OpenProject::SqlSanitization.sanitize(attachable_changes_sql,
+                                              journable_id: journable.id,
+                                              container_type: journable.class.name)
     end
 
-    # TODO:
-    #  * normalize strings
     def customizable_changes_sql
-      <<~SQL
+      customizable_changes_sql = <<~SQL
         SELECT
           max_journals.journable_id
         FROM
@@ -248,18 +256,23 @@ module Journals
         FULL JOIN
           (SELECT *
            FROM custom_values
-           WHERE custom_values.customized_id = #{journable.id} AND custom_values.customized_type = '#{journable.class.name}') custom_values
+           WHERE custom_values.customized_id = :journable_id AND custom_values.customized_type = :customized_type) custom_values
         ON
           custom_values.custom_field_id = customizable_journals.custom_field_id
         WHERE
           (custom_values.value IS NULL AND customizable_journals.value IS NOT NULL)
           OR (customizable_journals.value IS NULL AND custom_values.value IS NOT NULL AND custom_values.value != '')
-          OR (customizable_journals.value != custom_values.value)
+          OR (#{normalize_newlines_sql('customizable_journals.value')} !=
+              #{normalize_newlines_sql('custom_values.value')})
       SQL
+
+      ::OpenProject::SqlSanitization.sanitize(customizable_changes_sql,
+                                              customized_type: journable.class.name,
+                                              journable_id: journable.id)
     end
 
     def data_changes_sql
-      <<~SQL
+      data_changes_sql = <<~SQL
         SELECT
           #{journable_table_name}.id journable_id
         FROM
@@ -273,8 +286,11 @@ module Journals
         ON
           #{journable_table_name}.id = #{data_table_name}.journable_id
         WHERE
-          #{journable_table_name}.id = #{journable.id} AND (#{data_changes_condition_sql})
+          #{journable_table_name}.id = :journable_id AND (#{data_changes_condition_sql})
       SQL
+
+      ::OpenProject::SqlSanitization.sanitize(data_changes_sql,
+                                              journable_id: journable.id)
     end
 
     def only_if_created_sql
@@ -299,8 +315,8 @@ module Journals
 
       data_changes += text_column_names.map do |column_name|
         <<~SQL
-          (REGEXP_REPLACE(COALESCE(#{journable_table}.#{column_name}, ''), '\\r\\n', '\n', 'g') !=
-           REGEXP_REPLACE(COALESCE(#{data_table}.#{column_name}, ''), '\\r\\n', '\n', 'g'))
+          #{normalize_newlines_sql("#{journable_table}.#{column_name}")} !=
+           #{normalize_newlines_sql("#{data_table}.#{column_name}")}
         SQL
       end
 
@@ -314,7 +330,7 @@ module Journals
 
     def data_source_columns
       text_columns = text_column_names
-      normalized_text_columns = text_columns.map { |column| "REGEXP_REPLACE(#{column}, '\\r\\n', '\n', 'g')" }
+      normalized_text_columns = text_columns.map { |column| normalize_newlines_sql(column) }
       (journable.journaled_columns_names - text_columns + normalized_text_columns).join(', ')
     end
 
@@ -340,6 +356,10 @@ module Journals
 
     def data_table_name
       journable.class.journal_class.table_name
+    end
+
+    def normalize_newlines_sql(column)
+      "REGEXP_REPLACE(COALESCE(#{column},''), '\\r\\n', '\n', 'g')"
     end
 
     # Because we added the journal via bare metal sql, rails does not yet
