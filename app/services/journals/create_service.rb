@@ -1,5 +1,4 @@
 # TODO: remove journal version table
-# TODO: Write migration to split existing multi select custom field journals into multiple
 
 # Will create journals for a journable (e.g. WorkPackage and Meeting)
 # As a journal is basically a copy of the current state of the database, consisting of the journable as well as its
