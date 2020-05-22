@@ -1,5 +1,3 @@
-# TODO: remove journal version table
-
 # Will create journals for a journable (e.g. WorkPackage and Meeting)
 # As a journal is basically a copy of the current state of the database, consisting of the journable as well as its
 # custom values and attachments, those entries are copied in the database.
