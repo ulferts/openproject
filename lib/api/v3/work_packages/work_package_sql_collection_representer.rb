@@ -8,14 +8,14 @@ module API
                        project: nil,
                        groups:,
                        total_sums:,
+                       embed: {},
+                       select: {},
                        page: nil,
                        per_page: nil,
-                       embed_schemas: false,
                        current_user:)
           @project = project
           @groups = groups
           @total_sums = total_sums
-          @embed_schemas = embed_schemas
           @scope = scope
         end
 
@@ -26,16 +26,17 @@ module API
                 '_embedded', json_build_object(
                   'elements', json_agg(
                     json_build_object(
-                      'id', work_packages.id
+                      'id', work_packages.id,
+                      'subject', work_packages.subject
                     )
                   )
                 )  
-              ) AS result
+              ) AS json
             FROM 
               (#{@scope.select('work_packages.*').to_sql}) work_packages
           SQL
 
-          result['result']
+          result['json']
         end
       end
     end

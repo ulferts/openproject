@@ -223,25 +223,55 @@ describe 'API v3 Work package resource',
     context 'reduced representer' do
       let(:props) do
         {
-          reduced: 1
-        }.to_query
+          embed: embed_props,
+          select: select_props
+        }.compact.to_query
       end
+
+      let(:embed_props) { nil }
+      let(:select_props) { nil }
 
       let(:path) { "#{api_v3_paths.work_packages}?#{props}" }
 
-      it 'is the reduced representer' do
-        expected = {
-          _embedded: {
-            elements: [
-              {
-                id: work_package.id
-              }
-            ]
-          }
-        }
+      context 'embedding and selecting only some properties' do
+        let(:embed_props) { 'elements' }
+        let(:select_props) { 'elements/id,elements/subject' }
 
-        expect(subject.body)
-          .to be_json_eql(expected.to_json)
+        it 'is the reduced set of properties of the embedded elements' do
+          expected = {
+            _embedded: {
+              elements: [
+                {
+                  id: work_package.id,
+                  subject: work_package.subject
+                }
+              ]
+            }
+          }
+
+          expect(subject.body)
+            .to be_json_eql(expected.to_json)
+        end
+      end
+
+      context 'embedding and selecting only some properties' do
+        let(:embed_props) { 'elements' }
+        let(:select_props) { 'elements/id' }
+
+        it 'is the reduced set of properties of the embedded elements' do
+          expected = {
+            _embedded: {
+              elements: [
+                {
+                  id: work_package.id
+                }
+              ]
+            }
+          }
+
+          expect(subject.body)
+            .to be_json_eql(expected.to_json)
+        end
       end
     end
   end

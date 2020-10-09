@@ -61,7 +61,7 @@ module API
           results_scope = results_scope.where(id: scope.select(:id))
         end
 
-        if params[:reduced]
+        if reduced?(params)
           reduced_collection_representer(results_scope,
                                          params: params,
                                          project: query.project,
@@ -74,6 +74,10 @@ module API
                                       groups: generate_groups,
                                       sums: generate_total_sums)
         end
+      end
+
+      def reduced?(params)
+        params[:embed] || params[:select]
       end
 
       attr_accessor :query,
@@ -168,6 +172,12 @@ module API
       def reduced_collection_representer(work_packages, params:, project:, groups:, sums:)
         resulting_params = calculate_resulting_params(params)
 
+        parsed_params = ::API::V3::ParseQueryParamsService
+                          .new
+                          .call(params)
+                          .result
+
+
         ::API::V3::WorkPackages::WorkPackageSqlCollectionRepresenter.new(
           work_packages,
           self_link(project),
@@ -177,7 +187,8 @@ module API
           per_page: resulting_params[:pageSize],
           groups: groups,
           total_sums: sums,
-          embed_schemas: true,
+          embed: parsed_params[:embed],
+          select: parsed_params[:select],
           current_user: current_user
         )
 

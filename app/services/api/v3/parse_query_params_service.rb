@@ -31,6 +31,8 @@ module API
     class ParseQueryParamsService
       KEYS_GROUP_BY = %i(group_by groupBy g).freeze
       KEYS_COLUMNS = %i(columns c column_names columns[]).freeze
+      KEYS_EMBED = %i(embed).freeze
+      KEYS_SELECT = %i(select).freeze
 
       def call(params)
         json_parsed = json_parsed_params(params)
@@ -69,7 +71,9 @@ module API
           highlighting_mode: params[:highlightingMode],
           highlighted_attributes: highlighted_attributes_from_params(params),
           display_representation: params[:displayRepresentation],
-          show_hierarchies: boolearize(params[:showHierarchies])
+          show_hierarchies: boolearize(params[:showHierarchies]),
+          embed: nested_from_params(params, KEYS_EMBED),
+          select: nested_from_params(params, KEYS_SELECT)
         }
       end
 
@@ -153,6 +157,21 @@ module API
           attr = href.split('/').last
           convert_attribute(attr)
         end
+      end
+
+      def nested_from_params(params, key)
+        key_params = params_value(params, key)
+
+        return unless key_params
+
+        key_params
+          .split(',')
+          .map { |path| nested_hash(path.split('/')) }
+          .inject({}) { |hash, nested| hash.deep_merge(nested) }
+      end
+
+      def nested_hash(path)
+        { path[0] => path.length > 1 ? nested_hash(path[1..-1]) : {} }
       end
 
       def boolearize(value)

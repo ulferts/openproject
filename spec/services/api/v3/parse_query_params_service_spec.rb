@@ -306,5 +306,19 @@ describe ::API::V3::ParseQueryParamsService,
         let(:expected) { { timeline_labels: input.stringify_keys } }
       end
     end
+
+    context 'with select' do
+      it_behaves_like 'transforms' do
+        let(:params) { { select: 'a,b/c,b/d/e,b/d/f,d' } }
+        let(:expected) { { select: { 'a' => {}, 'b' => { 'c' => {}, 'd' => { 'e' => {}, 'f' => {} } }, 'd' => {} } } }
+      end
+    end
+
+    context 'with embed' do
+      it_behaves_like 'transforms' do
+        let(:params) { { embed: 'a,b/c,b/d/e,b/d/f,d' } }
+        let(:expected) { { embed: { 'a' => {}, 'b' => { 'c' => {}, 'd' => { 'e' => {}, 'f' => {} } }, 'd' => {} } } }
+      end
+    end
   end
 end
