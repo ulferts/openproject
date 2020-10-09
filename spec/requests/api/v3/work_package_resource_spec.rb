@@ -219,6 +219,31 @@ describe 'API v3 Work package resource',
         it_behaves_like 'param validation error'
       end
     end
+
+    context 'reduced representer' do
+      let(:props) do
+        {
+          reduced: 1
+        }.to_query
+      end
+
+      let(:path) { "#{api_v3_paths.work_packages}?#{props}" }
+
+      it 'is the reduced representer' do
+        expected = {
+          _embedded: {
+            elements: [
+              {
+                id: work_package.id
+              }
+            ]
+          }
+        }
+
+        expect(subject.body)
+          .to be_json_eql(expected.to_json)
+      end
+    end
   end
 
   describe 'GET /api/v3/work_packages/:id' do
