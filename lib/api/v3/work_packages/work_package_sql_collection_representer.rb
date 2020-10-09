@@ -2,6 +2,10 @@ module API
   module V3
     module WorkPackages
       class WorkPackageSqlCollectionRepresenter
+        attr_accessor :embed,
+                      :select,
+                      :current_user
+
         def initialize(scope,
                        self_link,
                        query: {},
@@ -17,26 +21,38 @@ module API
           @groups = groups
           @total_sums = total_sums
           @scope = scope
+          self.embed = embed
+          self.select = select
+          self.current_user = current_user
         end
 
-        def to_json
+        def to_json(*)
           result = ActiveRecord::Base.connection.select_one <<~SQL
             SELECT 
-              json_build_object(
-                '_embedded', json_build_object(
-                  'elements', json_agg(
-                    json_build_object(
-                      'id', work_packages.id,
-                      'subject', work_packages.subject
-                    )
-                  )
-                )  
-              ) AS json
+              #{select_sql} AS json 
             FROM 
               (#{@scope.select('work_packages.*').to_sql}) work_packages
           SQL
 
           result['json']
+        end
+
+        def select_sql
+          <<~SELECT
+            json_build_object(
+              '_embedded', json_build_object(
+                'elements', json_agg(
+                  #{elements_select_sql}
+                )
+              )  
+            )
+          SELECT
+        end
+
+        def elements_select_sql
+          API::V3::WorkPackages::WorkPackageSqlRepresenter
+            .new(nil, current_user: current_user, embed: embed['elements'], select: select['elements'])
+            .select_sql
         end
       end
     end

@@ -31,13 +31,36 @@
 module API
   module V3
     module WorkPackages
-      class WorkPackageListRepresenter < ::API::Decorators::UnpaginatedCollection
-        element_decorator ::API::V3::WorkPackages::WorkPackageRepresenter
+      class WorkPackageSqlRepresenter
+        attr_accessor :scope,
+                      :current_user,
+                      :embed_links,
+                      :embed,
+                      :select
 
-        def initialize(models, self_link, current_user:)
-          super
+        def initialize(scope,
+                       current_user:,
+                       select: {},
+                       embed: {},
+                       embed_links: false)
+          self.scope = scope
+          self.current_user = current_user
+          self.embed_links = embed_links
+          self.embed = embed
+          self.select = select
+        end
 
-          @represented = ::API::V3::WorkPackages::WorkPackageEagerLoadingWrapper.wrap(represented, current_user)
+        def select_sql
+          properties = select
+                       .select { |_,v| v.empty? }
+                       .keys
+                       .map { |property| "'#{property}', work_packages.#{property}" }.join(', ')
+
+          <<~SELECT
+            json_build_object(
+              #{properties}
+            )
+          SELECT
         end
       end
     end
