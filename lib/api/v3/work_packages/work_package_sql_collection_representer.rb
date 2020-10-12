@@ -2,6 +2,12 @@ module API
   module V3
     module WorkPackages
       class WorkPackageSqlCollectionRepresenter
+        class_attribute :embed_map
+
+        self.embed_map = {
+          elements: WorkPackageSqlRepresenter
+        }
+
         attr_accessor :embed,
                       :select,
                       :current_user
@@ -53,6 +59,24 @@ module API
           API::V3::WorkPackages::WorkPackageSqlRepresenter
             .new(nil, current_user: current_user, embed: embed['elements'], select: select['elements'])
             .select_sql
+        end
+
+        class << self
+          def select_sql
+            <<~SELECT
+              json_build_object(
+                '_embedded', json_build_object(
+                  'elements', json_agg(
+                    %<work_packages_element>s
+                  )
+                )  
+              )
+            SELECT
+          end
+
+          def select_embed
+            [work_packages_element]
+          end
         end
       end
     end
