@@ -42,11 +42,18 @@ module API
           self.select = select
         end
 
-        def walk
+        def walk(start)
+          selects = embedded_depth_first([], start)
+
+          # TODO move the from part into the representers as well.
+          # For that, the from part will have to be returned together with the selects.
+          # It will probably also have to return eventual CTEs.
+          # To handle the complexity there, a simple data object should be returned
+          # consisting of select, from and CTEs
           self.sql = <<~SQL
-            SELECT 
-              #{API::V3::WorkPackages::WorkPackageSqlCollectionRepresenter.select_sql} AS json 
-            FROM 
+            SELECT
+              #{selects} AS json
+            FROM
               (#{@scope.select('work_packages.*').to_sql}) work_packages
           SQL
 
@@ -65,11 +72,25 @@ module API
                       :select,
                       :sql
 
-        def properties
-          select
-            .select { |_,v| v.empty? }
-            .keys
-            .map { |property| "'#{property}', work_packages.#{property}" }.join(', ')
+        def embedded_depth_first(stack, current_representer)
+          up_map = {}
+
+          embed_for(stack).each_key do |key|
+            representer = current_representer
+                          .embed_map[key]
+
+            up_map[key] = embedded_depth_first(stack.dup << key, representer)
+          end
+
+          current_representer.select_sql(up_map, select_for(stack))
+        end
+
+        def select_for(stack)
+          stack.any? ? select.dig(*stack) : select
+        end
+
+        def embed_for(stack)
+          stack.any? ? embed.dig(*stack) : embed
         end
       end
     end

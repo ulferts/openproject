@@ -32,35 +32,20 @@ module API
   module V3
     module WorkPackages
       class WorkPackageSqlRepresenter
-        attr_accessor :scope,
-                      :current_user,
-                      :embed_links,
-                      :embed,
-                      :select
+        class << self
+          def select_sql(_replace_map, select)
 
-        def initialize(scope,
-                       current_user:,
-                       select: {},
-                       embed: {},
-                       embed_links: false)
-          self.scope = scope
-          self.current_user = current_user
-          self.embed_links = embed_links
-          self.embed = embed
-          self.select = select
-        end
+            properties = select
+                         .select { |_,v| v.empty? }
+                         .keys
+                         .map { |property| "'#{property}', work_packages.#{property}" }.join(', ')
 
-        def select_sql
-          properties = select
-                       .select { |_,v| v.empty? }
-                       .keys
-                       .map { |property| "'#{property}', work_packages.#{property}" }.join(', ')
-
-          <<~SELECT
-            json_build_object(
-              #{properties}
-            )
-          SELECT
+            <<~SELECT
+              json_build_object(
+                #{properties}
+              )
+            SELECT
+          end
         end
       end
     end

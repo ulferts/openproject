@@ -177,30 +177,12 @@ module API
                           .call(params)
                           .result
 
-        x = ::API::V3::Utilities::SqlRepresenterWalker
+        ::API::V3::Utilities::SqlRepresenterWalker
           .new(work_packages,
                embed: parsed_params[:embed],
                select: parsed_params[:select],
                current_user: current_user)
-          .walk
-
-        binding.pry
-
-        x
-        #WorkPackageSqlCollectionRepresenter.new(
-        #  work_packages,
-        #  self_link(project),
-        #  project: project,
-        #  query: resulting_params,
-        #  page: resulting_params[:offset],
-        #  per_page: resulting_params[:pageSize],
-        #  groups: groups,
-        #  total_sums: sums,
-        #  embed: parsed_params[:embed],
-        #  select: parsed_params[:select],
-        #  current_user: current_user
-        #)
-
+          .walk(API::V3::WorkPackages::WorkPackageSqlCollectionRepresenter)
       end
 
       def to_i_or_nil(value)
