@@ -32,21 +32,75 @@ module API
   module V3
     module WorkPackages
       class WorkPackageSqlRepresenter
-        class << self
-          def select_sql(_replace_map, select)
 
-            properties = select
-                         .select { |_,v| v.empty? }
-                         .keys
-                         .map { |property| "'#{property}', work_packages.#{property}" }.join(', ')
+        class_attribute :properties
+
+        class << self
+          # Properties
+          # TODO: extract into class
+          def properties_sql(select)
+            # TODO: throw error on non supported select
+            cleaned_selects = select
+                              .symbolize_keys
+                              .select { |_,v| v.empty? }
+                              .slice(*supported_selects)
+                              .keys
+
+            properties
+              .slice(*cleaned_selects)
+              .map do |name, options|
+              representation = if options[:representation]
+                options[:representation].call
+              else
+                "work_packages.#{options[:column]}"
+              end
+
+              "'#{name}', #{representation}"
+            end.join(', ')
+          end
+
+          def property(name,
+                       column: name,
+                       representation: nil,
+                       render_if: nil)
+            self.properties ||= {}
+
+            properties[name] = { column: column, render_if: render_if, representation: representation }
+          end
+
+          def properties_conditions
+            properties
+              .select { |_, options| options[:render_if] }
+              .map do |name, options|
+                "- CASE WHEN #{options[:render_if].call} THEN '' ELSE '#{name}' END"
+              end.join(' ')
+          end
+
+          def select_sql(_replace_map, select)
 
             <<~SELECT
               json_build_object(
-                #{properties}
+                #{properties_sql(select)}
               )
             SELECT
           end
+
+          private
+
+          def supported_selects
+            %i(id subject createdAt updatedAt)
+          end
         end
+
+        property :id
+
+        property :subject
+
+        property :createdAt,
+                 column: :created_at
+
+        property :updatedAt,
+                 column: :updated_at
       end
     end
   end
