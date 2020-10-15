@@ -235,7 +235,7 @@ describe 'API v3 Work package resource',
 
       context 'embedding and selecting only some properties' do
         let(:embed_props) { 'elements' }
-        let(:select_props) { 'elements/id,elements/subject,elements/createdAt,elements/updatedAt' }
+        let(:select_props) { 'elements/id,elements/subject,elements/createdAt,elements/updatedAt,elements/author' }
 
         it 'is the reduced set of properties of the embedded elements' do
           expected = {
@@ -246,7 +246,13 @@ describe 'API v3 Work package resource',
                   subject: work_package.subject,
                   # postgresql does have a higher precision on iso8601 strings
                   createdAt: work_package.created_at.iso8601.gsub('Z', ".#{work_package.created_at.strftime('%6N')}"),
-                  updatedAt: work_package.updated_at.iso8601.gsub('Z', ".#{work_package.updated_at.strftime('%6N')}")
+                  updatedAt: work_package.updated_at.iso8601.gsub('Z', ".#{work_package.updated_at.strftime('%6N')}"),
+                  _links: {
+                    author: {
+                      href: api_v3_paths.user(work_package.author.id),
+                      title: work_package.author.name
+                    }
+                  }
                 }
               ]
             }
@@ -266,7 +272,8 @@ describe 'API v3 Work package resource',
             _embedded: {
               elements: [
                 {
-                  id: work_package.id
+                  id: work_package.id,
+                  _links: {}
                 }
               ]
             }

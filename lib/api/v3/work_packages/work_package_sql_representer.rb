@@ -32,22 +32,18 @@ module API
   module V3
     module WorkPackages
       class WorkPackageSqlRepresenter
+        extend ::API::V3::Utilities::PathHelper
 
-        class_attribute :properties
+        class_attribute :properties,
+                        :association_links
 
         class << self
           # Properties
           # TODO: extract into class
           def properties_sql(select)
-            # TODO: throw error on non supported select
-            cleaned_selects = select
-                              .symbolize_keys
-                              .select { |_,v| v.empty? }
-                              .slice(*supported_selects)
-                              .keys
 
             properties
-              .slice(*cleaned_selects)
+              .slice(*cleaned_selects(select))
               .map do |name, options|
               representation = if options[:representation]
                 options[:representation].call
@@ -76,11 +72,71 @@ module API
               end.join(' ')
           end
 
+          # TODO: turn association_link into separate class so that
+          # instances can be generated here
+          def association_link(name, as: name, path: nil, join:, title: nil, href: nil)
+            self.association_links ||= {}
+
+            association_links[name] = { as: as,
+                                        path: path,
+                                        join: join,
+                                        title: title,
+                                        href: href }
+          end
+
+          def association_links_joins(select)
+            association_links
+              .slice(*cleaned_selects(select))
+              .map do |name, link|
+              if link[:join].is_a?(Symbol)
+                "LEFT OUTER JOIN #{link[:join]} #{name} ON #{name}.id = work_packages.#{name}_id"
+              else
+                "LEFT OUTER JOIN #{link[:join][:table]} #{name} ON #{link[:join][:condition]} AND #{name}.id = work_packages.#{name}_id"
+              end
+            end
+              .join(' ')
+          end
+
+          def association_links_selects(select)
+            association_links
+              .slice(*cleaned_selects(select))
+              .map do |name, link|
+              path_name = link[:path] ? link[:path][:api] : name
+              title = link[:title] ? link[:title].call : "#{name}.name"
+
+              href = link[:href] ? link[:href].call : "format('#{api_v3_paths.send(path_name, '%s')}', #{name}.id)"
+
+              <<-SQL
+               '#{link[:as]}', CASE
+                               WHEN #{name}.id IS NOT NULL
+                               THEN
+                               json_build_object('href', #{href},
+                                                 'title', #{title})
+                               ELSE
+                               json_build_object('href', NULL,
+                                                 'title', NULL)
+                               END
+              SQL
+            end
+              .join(', ')
+          end
+
+          #def api_v3_paths
+          #  @url_helpers ||= OpenProject::StaticRouting::StaticUrlHelpers.new
+          #end
+
+          #def url_helpers
+          #  @url_helpers ||= OpenProject::StaticRouting::StaticUrlHelpers.new
+          #end
+
           def select_sql(_replace_map, select)
 
             <<~SELECT
               json_build_object(
-                #{properties_sql(select)}
+                #{properties_sql(select)},
+                '_links', json_strip_nulls(
+                  json_build_object(#{association_links_selects(select)})
+                )
               )
             SELECT
           end
@@ -88,7 +144,16 @@ module API
           private
 
           def supported_selects
-            %i(id subject createdAt updatedAt)
+            %i(id subject createdAt updatedAt author)
+          end
+
+          def cleaned_selects(select)
+            # TODO: throw error on non supported select
+            select
+              .symbolize_keys
+              .select { |_,v| v.empty? }
+              .slice(*supported_selects)
+              .keys
           end
         end
 
@@ -101,6 +166,19 @@ module API
 
         property :updatedAt,
                  column: :updated_at
+
+        association_link :author,
+                         path: { api: :user, params: %w(author_id) },
+                         join: :users,
+                         title: -> {
+                           join_string = if Setting.user_format == :lastname_coma_firstname
+                                           " || ', ' || "
+                                         else
+                                           " || ' ' || "
+                                         end
+
+                           User::USER_FORMATS_STRUCTURE[Setting.user_format].map { |p| "author.#{p}" }.join(join_string)
+                         }
       end
     end
   end

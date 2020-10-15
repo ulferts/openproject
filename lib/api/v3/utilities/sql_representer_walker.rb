@@ -43,9 +43,17 @@ module API
         end
 
         def walk(start)
-          selects = embedded_depth_first([], start)
+          selects = embedded_depth_first([], start) do |map, stack, current_representer|
+            current_representer.select_sql(map, select_for(stack))
+          end
 
-          # TODO move the from part into the representers as well.
+          joins = []
+
+          embedded_depth_first([], start) do |map, stack, current_representer|
+            joins << current_representer.association_links_joins(select_for(stack))
+          end
+
+          # TODO move the from part into the collection representer.
           # For that, the from part will have to be returned together with the selects.
           # It will probably also have to return eventual CTEs.
           # To handle the complexity there, a simple data object should be returned
@@ -55,6 +63,7 @@ module API
               #{selects} AS json
             FROM
               (#{@scope.select('work_packages.*').to_sql}) work_packages
+              #{joins.join(' ')}
           SQL
 
           self
@@ -72,17 +81,17 @@ module API
                       :select,
                       :sql
 
-        def embedded_depth_first(stack, current_representer)
+        def embedded_depth_first(stack, current_representer, &block)
           up_map = {}
 
           embed_for(stack).each_key do |key|
             representer = current_representer
                           .embed_map[key]
 
-            up_map[key] = embedded_depth_first(stack.dup << key, representer)
+            up_map[key] = embedded_depth_first(stack.dup << key, representer, &block)
           end
 
-          current_representer.select_sql(up_map, select_for(stack))
+          yield up_map, stack, current_representer
         end
 
         def select_for(stack)

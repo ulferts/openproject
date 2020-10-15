@@ -9,6 +9,10 @@ module API
         }.with_indifferent_access
 
         class << self
+          def association_links_joins(_select)
+            ''
+          end
+
           def select_sql(replace_map, _select)
             sql = <<~SELECT
               json_build_object(
