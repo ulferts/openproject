@@ -49,7 +49,9 @@ module API
 
           joins = []
 
-          embedded_depth_first([], start) do |map, stack, current_representer|
+          # Turn this into something where the scope is passed in and can then be modified by the
+          # representers
+          embedded_depth_first([], start) do |_, stack, current_representer|
             joins << current_representer.association_links_joins(select_for(stack))
           end
 
