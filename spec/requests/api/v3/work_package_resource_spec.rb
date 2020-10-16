@@ -40,9 +40,11 @@ describe 'API v3 Work package resource',
 
   let(:work_package) do
     FactoryBot.create(:work_package,
+                      assigned_to: work_package_assignee,
                       project_id: project.id,
                       description: 'lorem ipsum')
   end
+  let(:work_package_assignee) { nil }
   let(:project) do
     FactoryBot.create(:project, identifier: 'test_project', public: false)
   end
@@ -217,6 +219,79 @@ describe 'API v3 Work package resource',
         end
 
         it_behaves_like 'param validation error'
+      end
+    end
+
+    context 'reduced representer' do
+      let(:work_package_assignee) { FactoryBot.create(:user) }
+
+      let(:props) do
+        {
+          embed: embed_props,
+          select: select_props
+        }.compact.to_query
+      end
+
+      let(:embed_props) { nil }
+      let(:select_props) { nil }
+
+      let(:path) { "#{api_v3_paths.work_packages}?#{props}" }
+
+      context 'embedding and selecting only some properties' do
+        let(:embed_props) { 'elements' }
+        let(:select_props) do
+          'elements/id,elements/subject,elements/createdAt,elements/updatedAt,elements/author,elements/assignee'
+        end
+
+        it 'is the reduced set of properties of the embedded elements' do
+          expected = {
+            _embedded: {
+              elements: [
+                {
+                  id: work_package.id,
+                  subject: work_package.subject,
+                  # postgresql does have a higher precision on iso8601 strings
+                  createdAt: work_package.created_at.iso8601.gsub('Z', ".#{work_package.created_at.strftime('%6N').sub(/0+\Z/,'')}"),
+                  updatedAt: work_package.updated_at.iso8601.gsub('Z', ".#{work_package.updated_at.strftime('%6N').sub(/0+\Z/,'')}"),
+                  _links: {
+                    author: {
+                      href: api_v3_paths.user(work_package.author.id),
+                      title: work_package.author.name
+                    },
+                    assignee: {
+                      href: api_v3_paths.user(work_package.assigned_to.id),
+                      title: work_package.assigned_to.name
+                    }
+                  }
+                }
+              ]
+            }
+          }
+
+          expect(subject.body)
+            .to be_json_eql(expected.to_json)
+        end
+      end
+
+      context 'embedding and selecting only some properties' do
+        let(:embed_props) { 'elements' }
+        let(:select_props) { 'elements/id' }
+
+        it 'is the reduced set of properties of the embedded elements' do
+          expected = {
+            _embedded: {
+              elements: [
+                {
+                  id: work_package.id,
+                  _links: {}
+                }
+              ]
+            }
+          }
+
+          expect(subject.body)
+            .to be_json_eql(expected.to_json)
+        end
       end
     end
   end

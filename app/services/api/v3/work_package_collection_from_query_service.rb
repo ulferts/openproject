@@ -61,11 +61,23 @@ module API
           results_scope = results_scope.where(id: scope.select(:id))
         end
 
-        collection_representer(results_scope,
-                               params: params,
-                               project: query.project,
-                               groups: generate_groups,
-                               sums: generate_total_sums)
+        if reduced?(params)
+          reduced_collection_representer(results_scope,
+                                         params: params,
+                                         project: query.project,
+                                         groups: generate_groups,
+                                         sums: generate_total_sums)
+        else
+          full_collection_representer(results_scope,
+                                      params: params,
+                                      project: query.project,
+                                      groups: generate_groups,
+                                      sums: generate_total_sums)
+        end
+      end
+
+      def reduced?(params)
+        params[:embed] || params[:select]
       end
 
       attr_accessor :query,
@@ -140,7 +152,7 @@ module API
         ]
       end
 
-      def collection_representer(work_packages, params:, project:, groups:, sums:)
+      def full_collection_representer(work_packages, params:, project:, groups:, sums:)
         resulting_params = calculate_resulting_params(params)
 
         ::API::V3::WorkPackages::WorkPackageCollectionRepresenter.new(
@@ -155,6 +167,22 @@ module API
           embed_schemas: true,
           current_user: current_user
         )
+      end
+
+      def reduced_collection_representer(work_packages, params:, project:, groups:, sums:)
+        resulting_params = calculate_resulting_params(params)
+
+        parsed_params = ::API::V3::ParseQueryParamsService
+                          .new
+                          .call(params)
+                          .result
+
+        ::API::V3::Utilities::SqlRepresenterWalker
+          .new(work_packages,
+               embed: parsed_params[:embed],
+               select: parsed_params[:select],
+               current_user: current_user)
+          .walk(API::V3::WorkPackages::WorkPackageSqlCollectionRepresenter)
       end
 
       def to_i_or_nil(value)
