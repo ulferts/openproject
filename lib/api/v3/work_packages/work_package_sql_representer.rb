@@ -125,9 +125,8 @@ module API
             <<~SELECT
               json_build_object(
                 #{properties_sql(select)},
-                '_links', json_strip_nulls(
+                '_links', 
                   json_build_object(#{association_links_selects(select)})
-                )
               )
             SELECT
           end
