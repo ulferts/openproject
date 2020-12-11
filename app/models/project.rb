@@ -140,6 +140,7 @@ class Project < ApplicationRecord
   has_one :status, class_name: 'Projects::Status', dependent: :destroy
   has_many :budgets, dependent: :destroy
 
+  include OpenProject::NestedSet::AwesomeNestedSetPatch
   acts_as_nested_set order_column: :name, dependent: :destroy
 
   acts_as_customizable
