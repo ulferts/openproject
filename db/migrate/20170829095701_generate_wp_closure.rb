@@ -225,6 +225,7 @@ class GenerateWpClosure < ActiveRecord::Migration[5.0]
   class NestedSetWorkPackage < ActiveRecord::Base
     self.table_name = 'work_packages'
 
+    include OpenProject::NestedSet::AwesomeNestedSetPatch
     acts_as_nested_set scope: 'root_id', dependent: :destroy
 
     include OpenProject::NestedSet::RebuildPatch
