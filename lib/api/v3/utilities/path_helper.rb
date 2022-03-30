@@ -103,6 +103,9 @@ module API
           index :attachment
           show :attachment
 
+          index :company
+          show :company
+
           def self.attachment_content(id)
             "#{root}/attachments/#{id}/content"
           end
