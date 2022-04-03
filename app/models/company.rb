@@ -37,6 +37,8 @@ class Company < ApplicationRecord
 
   belongs_to :owner, class_name: 'User'
 
+  validates_presence_of :name
+
   def parents_users
     @parents_users ||= parents.exists? ? users : [owner]
   end
