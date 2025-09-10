@@ -129,7 +129,7 @@
     "byte-base64": "^1.1.0",
     "chart.js": "4.5.0",
     "chartjs-plugin-datalabels": "^2.2.0",
-    "codemirror": "^5.62.0",
+    "codemirror": "^6.0.2",
     "copy-text-to-clipboard": "^3.0.0",
     "core-js": "^3.2.1",
     "crossvent": "^1.5.4",
